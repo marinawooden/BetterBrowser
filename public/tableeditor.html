@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- META -->
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Table Editor</title>
+  <!-- GOOGLE FONTS -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;600&family=Schibsted+Grotesk&family=Wix+Madefor+Display:wght@500&display=swap" rel="stylesheet">
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="./stylesheets/index.css">
+  <link rel="stylesheet" href="./stylesheets/tablecreator.css">
+  <script src="./scripts/tableeditor.js" defer></script>
+</head>
+<body>
+  <header>
+    <h1>Table Editor</h1>
+  </header>
+  <main>
+    <form id="table-options">
+      <div>
+        <label for="table-name">Table Name</label>
+        <input autocomplete="off" type="text" name="name" id="table-name" placeholder="table1">
+      </div>
+      <div>
+        <label for="pk">Primary Key</label>
+        <select name="pk" id="pk">
+          <!-- <option value="Col1">Col1</option>
+          <option value="Col2">Col2</option> -->
+        </select>
+      </div>
+      <div id="update-table">
+        <button>+ Update Table</button>
+      </div>
+    </form>
+    <table id="row-builder">
+      <tr>
+        <th></th>
+        <th>Name</th>
+        <th>Type</th>
+        <th data-detail="non-null">NN</th>
+        <th data-detail="autoincrement">AI</th>
+        <th data-detail="unique">U</th>
+        <th data-detail="foreign-key">FK</th>
+        <th>Default Value</th>
+      </tr>
+    </table>
+    <div class="table-attachment">
+      <p id="add-row">+ Add a Row</p>
+    </div>
+    <div id="create-table-query">
+      
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "name": "betterbrowser",
+  "version": "1.0.0",
+  "description": "A better SQLite browser GUI",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "Marina Wooden",
+  "license": "MIT",
+  "dependencies": {
+    "electron": "^24.4.0",
+    "electron-store": "^8.1.0",
+    "http": "^0.0.1-security",
+    "sqlite": "^4.2.1",
+    "sqlite3": "^5.1.6"
+  },
+  "devDependencies": {
+    "electron-reload": "^2.0.0-alpha.1",
+    "electron-reloader": "^1.2.3"
+  }
+}

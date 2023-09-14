@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';" />
+  <script src="./scripts/renderer.js" defer></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;600&family=Schibsted+Grotesk&family=Wix+Madefor+Display:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./stylesheets/index.css">
+  <title>BetterBrowser v.1.0</title>
+</head>
+<body class="d-flex">
+  <aside>
+    <div id="logo">
+      <img src="./images/logo.svg" alt="BetterBrowser logo"/>
+      <h1>BetterBrowser</h1>
+    </div>
+    <div id="actions">
+      <button id="add-database-button">+ Add New Database</button>
+      <button id="open-database-button">Open Database</button>
+    </div>
+  </aside>
+  <section>
+    <header>
+      <nav>
+        <a href="#database" data-target="database" class="active">Database</a>
+        <a href="#viewer" data-target="viewer">Data Viewer</a>
+        <a href="#query-tester" data-target="query-tester" >Execute SQL</a>
+      </nav>
+    </header>
+    <main>
+      <section id="database" class="active">
+        <h2>Database Structure</h2>
+        <div id="table-schema-view">
+          <p>No database is currently open, please create one or open one from a file</p>
+        </div>
+        <div class="side-by-side">
+          <h3>Recent Connections</h3>
+          <p id="clear-connections">Clear List</p>
+        </div>
+        <section id="recent-connections">
+          <p>Databases you connect to will be shown here (once you actually connect to them)</p>
+        </section>
+      </section>
+      <section id="viewer">
+        <h2>Data Viewer</h2>
+        <div id="table-view">
+          <div>
+            <div>
+              <p>Table:</p>
+              <select name="table" id="table-name">
+              </select>
+            </div>
+            <button id="data-options-toggler">
+              <img class="options-icon" src="./images/three-dots.svg" alt="more database options" />
+            </button>
+            <div id="data-options" class="collapsed">
+              <ul>
+                <li id="add-new-row">
+                  Add New Row
+                </li>
+                <li id="save-changes">
+                  Save Changes
+                </li>
+                <li id="delete-selected">
+                  Delete Selected
+                </li>
+              </ul>
+            </div>
+          </div>
+          <p>No database is currently open, please create one or open one from a file</p>
+        </div>
+        <div id="table-page-toggle">
+          <p class="invisible" id="page-back">&lt; Back</p>
+          <p id="page-next">Next &gt;</p>
+        </div>
+      </section>
+      <section id="query-tester">
+        <button id="sql-executor">Execute SQL</button>
+        <h2>SQL Executor</h2>
+        <p>Current Database: <span class="current-db-name"></span></p>
+        <div>
+          <h3>Query:</h3>
+          <textarea id="sql-input" placeholder="SELECT * FROM demo"></textarea>
+          <h3>Results:</h3>
+          <div id="table-limiter">
+          </div>
+          <h3>Details:</h3>
+          <section id="query-details">
+          </section>
+        </div>
+      </section>
+    </main>
+  </section>
+</body>
+</html>
