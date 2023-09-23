@@ -31,13 +31,13 @@ body {
   border: 0;
   margin-bottom: 1em;
   cursor: pointer;
+}
+
+button {
   transition: transform .5s ease;
 }
 
-#actions button:hover,
-#add-table:hover,
-#create-table:hover,
-#sql-executor:hover {
+button:hover {
   transform: translateY(-2px);
 }
 

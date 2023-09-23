@@ -1,21 +1,3 @@
-/**
- * 
-BEGIN TRANSACTION;
-
-ALTER TABLE table1 RENAME TO _table1_old;
-
-CREATE TABLE table1 (
-( column1 datatype [ NULL | NOT NULL ],
-  column2 datatype [ NULL | NOT NULL ],
-  ...
-);
-
-INSERT INTO table1 (column1, column2, ... column_n)
-  SELECT column1, column2, ... column_n
-  FROM _table1_old;
-
-COMMIT;
- */
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 
 const path = require('path')
@@ -34,6 +16,7 @@ let win;
 let tableCreator;
 let tableEditor;
 let editingTable;
+let csvUpload;
 
 const openTableCreator = () => {
   tableCreator = new BrowserWindow({
@@ -48,6 +31,20 @@ const openTableCreator = () => {
 
   tableCreator.loadFile('public/tablecreator.html')
   // tableCreator.webContents.openDevTools();
+}
+
+const openCSVEditor = () => {
+  csvUpload = new BrowserWindow({
+    width: 600,
+    height: 450,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  })
+
+  csvUpload.loadFile('public/uploadcsv.html')
 }
 
 const openTableEditor = () => {
@@ -69,34 +66,162 @@ const openTableEditor = () => {
   tableEditor.loadFile('public/tableeditor.html')
 }
 
-ipcMain.handle("rename-table", async (event, ...args) => {
+ipcMain.handle("get-constraints", async (even, ...args) => {
   try {
+    if (!editingTable || !db) {
+      throw new Error("No table or database currently open!");
+    }
 
+    let query = `SELECT sql FROM sqlite_master WHERE type="table" and name=?`;
+    let sql = await db.get(query, editingTable);
+    let constraints = sql.sql.split("\n")
+    .filter((sentence) => sentence[0] === '"')
+    .map((col) => {
+      let nn = /NOT NULL/.test(col)
+      let def = col.match(/(?<=DEFAULT ").*(?=")/)
+      let u = /UNIQUE/.test(col)
+
+      return {
+        "nn": nn,
+        "default": def ? def[0] : def,
+        "u": u
+      }
+    });
+
+    return {
+      "type": "success",
+      "results": constraints
+    }
   } catch (err) {
-
+    return {
+      "type": "err",
+      "err": err
+    }
   }
 });
 
+/**
+ * Deletes a column from an existing table
+ */
+ipcMain.handle("delete-col", async (event, ...args) => {
+  try {
+    if (!db || !editingTable) {
+      throw new Error("No table or database open");
+    }
+
+    if (!args[0]) {
+      throw new Error("Please specify a column to remove!");
+    }
+
+    let coltodrop = args[0];
+    let query = `ALTER TABLE ${editingTable} DROP COLUMN ${coltodrop};`;
+
+    await db.exec(query);
+
+    win.webContents.send("edits-complete");
+
+    return {
+      "type": "success"
+    }
+
+  } catch (err) {
+    return {
+      "type": "err",
+      "err": err
+    }
+  }
+});
+
+/**
+ * Updates an existing table in the database (copies data and replaces)
+ */
 ipcMain.handle('update-table', async (event, ...args) => {
+  try {
+    if (!db || !editingTable) {
+      throw new Error("No table or database open");
+    }
+    if (!args[0] || !args[1]) {
+      throw new Error("Missing required parameters!")
+    }
+
+    let creationStmt = args[0];
+    let newName = args[1];
+
+    let ogColumns = (await db.all("SELECT name FROM pragma_table_info('" + editingTable + "')")).map((col) =>  `"${col.name}"`);
+
+    console.log(ogColumns);
+    let query = "PRAGMA foreign_keys=off;\nBEGIN TRANSACTION;";
+    let tmpname = `"${Date.now()}"`;
+
+    query += `\nCREATE TABLE ${tmpname} (\n${creationStmt}\n);`;
+    query += `\nINSERT INTO ${tmpname} (${ogColumns.toString()}) SELECT * FROM '${editingTable}';`
+    query += `\nDROP TABLE ${editingTable};`
+    query += `\nALTER TABLE ${tmpname} RENAME TO '${newName}';`
+
+    console.log("QUERY");
+    console.log(query);
+
+    await db.exec(query);
+    await db.exec("\nCOMMIT;\nPRAGMA foreign_keys=on;")
+    editingTable = newName;
+
+    win.webContents.send("edits-complete");
+
+    return {
+      "type": "success"
+    }
+    
+  } catch (err) {
+    await db.exec("ROLLBACK;\nPRAGMA foreign_keys=on;");
+
+    console.log(err);
+    return {
+      "type": "err",
+      "err": err.code == "SQLITE_CONSTRAINT" ? err.message + ".  Try adding a default value to this column." : err
+    }
+  }
+});
+
+/**
+ * Puts doublesquotes around each column in a list of column names
+ * @param {Array} colnames - names of columns
+ * @returns String of quotes comma-separated column names
+ */
+function formatColumns(colnames) {
+  ans = "";
+  colnames.forEach((name, i) => {
+    ans += `"${name}${(i + 1) < colnames.length ? '", ' : '"'}`;
+  });
+
+  return ans;
+}
+
+ipcMain.handle('update-table-old', async (event, ...args) => {
   try {
     if (!editingTable) {
       throw new Error("No table currently open")
     }
 
-    let newcolnames = args[0];
-    // newcolnames = [[colname, definition]]
+    let colnames = args[0];
+    // colnames = [[colname, definition]]
     let newnames = args[1];
     // newnames = [[oldname, newname]]
+    let newtablename = args[2];
     
-    let qry = "BEGIN TRANSACTION";
+    
+    let qry = "BEGIN TRANSACTION"
 
-    newcolnames.forEach((newcol) => {
+    colnames.forEach((newcol) => {
       qry += `\nALTER TABLE ${editingTable} ADD '${newcol[0]}' ${newcol[1]};`;
     });
 
     newnames.forEach((namechange, i) => {
       qry += `\nALTER TABLE ${editingTable} RENAME COLUMN ${namechange[0]} TO ${namechange[1]}`
-    })
+    });
+
+    if (newtablename) {
+      qry += `\nALTER TABLE ${editingTable} RENAME TO ${newtablename}`;
+    }
     
     qry += "\nCOMMIT;";
 
@@ -177,6 +302,9 @@ ipcMain.handle('delete-table', async (event, ...args) => {
   }
 });
 
+/**
+ * Updates a sqlite table
+ */
 ipcMain.handle('save-changes', async (event, ...args) => {
   try {
     let table = args[0];
@@ -193,28 +321,37 @@ ipcMain.handle('save-changes', async (event, ...args) => {
       throw new Error("Missing required parameters.")
     }
 
+    qry = "\nBEGIN TRANSACTION;";
     
     if (newValues?.length > 0) {
       for (const arr of newValues) {
-        let qry = `INSERT INTO ${table} (${columns.toString()}) VALUES (${[...arr.map(() => "?")].toString()})`;
-        await db.run(qry, arr);
+        // bleh.  Need to find out how to use placeholders
+        qry += `\nINSERT INTO ${table} (${columns.toString()}) VALUES (${formatColumns(arr)});`;
+        // await db.run(qry, arr);
       }
     }
 
     for (let i = 0; i < modifiedRows.length; i++) {
       let j = 0;
       for (let column of columns) {
-        let qry = `UPDATE ${table} SET ${column} = ? WHERE ${pk} = ?`;
-        await db.run(qry, modifiedRows[i].values[j], modifiedRows[i].pk);
+        qry += `\nUPDATE "${table}" SET "${column}" = "${modifiedRows[i].values[j]}" WHERE "${pk}" = "${modifiedRows[i].pk}";`;
+        // await db.run(qry, modifiedRows[i].values[j], modifiedRows[i].pk);
         j++;
       }
     }
+
+    console.log(qry);
+    await db.exec(qry);
+    await db.exec("COMMIT;");
+
 
     return {
       "type": "success"
     }
   } catch (err) {
     // console.log("ERROR HANDLING REACHED")
+    await db.exec("ROLLBACK;");
+
     return {
       "type": "err",
       "err": err
@@ -286,6 +423,7 @@ ipcMain.handle('new-row-meta', async (event, ...args) => {
     return {
       "pk": pk.name,
       "columns": columns.map((col) => col.name),
+      "types": columns.map((col) => col.type),
       "isAutoincrement": !(!isAutoincrement),
       "lastID": lastid ? lastid.seq : 0
     }
@@ -317,7 +455,7 @@ ipcMain.handle('remove-rows', async (event, ...args) => {
       let columns = await db.all(`PRAGMA table_info(${table})`);
       let pk = columns.find((col) => col.pk === 1);
 
-      let query = `DELETE FROM ${table} WHERE ${pk["name"]} in (${rows.toString()})`;
+      let query = `DELETE FROM "${table}" WHERE "${pk["name"]}" in (${rows.toString()})`;
       console.log(query);
       let start = Date.now();
       let meta = await db.run(query);
@@ -429,7 +567,7 @@ ipcMain.handle('view-data', async (event, ...args) => {
 
     // TODO: SQL INJECTION PART 2
     let columns = await db.all("SELECT name FROM pragma_table_info('" + table + "')"); 
-    let tableData = await db.all(`SELECT * FROM ${table} LIMIT ${page * OFFSET}, ${OFFSET}`);
+    let tableData = await db.all(`SELECT * FROM '${table}' LIMIT ${page * OFFSET}, ${OFFSET}`);
 
     return {
       "columns": columns,
@@ -482,15 +620,16 @@ ipcMain.handle('recent-connections', async () => {
 ipcMain.handle('open-database', async (event, ...args) => {
   try {
     let dbPath = args[0];
+    console.log("REACHED POINT")
     if (!dbPath) {
       let pathSelect = await openDatabaseDialog();
+      
       if (!pathSelect["canceled"]) {
-        dbPath = pathSelect["filePaths"][0]
-        if (db) {
-          await db.close();
-        }
+        dbPath = pathSelect["filePaths"][0];
       }
-    } else if (db) {
+    }
+    
+    if (db) {
       await db.close();
     }
 
@@ -499,6 +638,7 @@ ipcMain.handle('open-database', async (event, ...args) => {
 
       let existing = store.get('recent-db');
 
+      console.log(existing);
       if (!existing) {
         store.set('recent-db', [dbPath]);
       } else if (!existing.includes(dbPath)) {
@@ -507,12 +647,21 @@ ipcMain.handle('open-database', async (event, ...args) => {
 
       currentDBPath = dbPath;
 
-      return currentDBPath
+      return {
+        "type": "success",
+        "res": currentDBPath
+      }
     } else {
-      return "Nothing Selected"
+      return {
+        "type": "neutral",
+        "err": "Nothing Selected"
+      }
     }
   } catch (err) {
-    return "Not Found"
+    return {
+      "type": "err",
+      "err": err
+    }
   }
 });
 
@@ -550,7 +699,7 @@ ipcMain.handle('add-table', async (event, ...args) => {
       let query = args[0];
       await db.run(query);
 
-      win.webContents.send("test");
+      win.webContents.send("table-added");
       tableCreator.close();
 
       return "UPDATED TABLE";
@@ -628,13 +777,18 @@ async function openDatabaseDialog() {
 // Appends development-mode settings
 if (env === 'development') {
   require('electron-reload')(__dirname, {
-      electron: path.join(__dirname, 'node_modules', '.bin', 'electron'),
-      hardResetMethod: 'exit'
+    electron: path.join(__dirname, 'node_modules', '.bin', 'electron'),
+    hardResetMethod: 'exit'
   });
 }
 
 /** Creates a new browser window with all required settings */
-const createWindow = () => {
+const createWindow = async () => {
+  if (db) {
+    await db.close();
+    db = null;
+  }
+  
   win = new BrowserWindow({
     width: 800,
     height: 600,
@@ -644,6 +798,15 @@ const createWindow = () => {
       contextIsolation: false
     }
   })
+
+  win.on("closed", async () => {
+    if (db) {
+      await db.close();
+      db = null;
+      currentDBPath = null;
+      win = null;
+    }
+  });
 
   win.loadFile('public/index.html')
   // win.webContents.openDevTools()

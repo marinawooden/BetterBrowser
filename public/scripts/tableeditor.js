@@ -25,9 +25,19 @@
     // update primary key functionality
     id("pk").addEventListener("change", newPk);
 
+    // rename table functionality
+    id("table-name").addEventListener("input", function() {
+      this.classList.add("new-table-name");
+      hasChanges = true;
+    })
+
     // add new row functionality
     id("add-row").addEventListener("click", () => {
       buildRow(true);
+      let newSelectOption = document.createElement("option");
+      newSelectOption.value = `Column ${qsa("#row-builder tr").length - 1}`;
+      newSelectOption.textContent = `Column ${qsa("#row-builder tr").length - 1}`;
+      id("pk").appendChild(newSelectOption);
     });
 
     // Save changes function
@@ -35,12 +45,17 @@
       e.preventDefault();
       saveNewChanges();
     });
-    window.addEventListener("keydown", async (e) => {
+    window.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        await saveNewChanges();
+        saveNewChanges();
       }
     });
+  }
+
+  async function getConstraints() {
+    let res = await ipc.invoke("get-constraints");
+    return res;
   }
 
   /**
@@ -67,7 +82,7 @@
       if (!hasChanges) {
         noNewChanges();
       } else {
-        let qry = await ipc.invoke("update-table", getNewColumnMeta(), getRenameInfo());
+        let qry = await ipc.invoke("update-table", creationStmt(), id("table-name").value);
         if (qry.type === "err") {
           throw new Error(qry.err);
         }
@@ -78,11 +93,28 @@
             col.classList.add("new-name");
             hasChanges = true;
           });
-          col.classList.remove("new-col")
+          col.classList.remove("new-col");
         });
 
+        qs("new-table-name")?.classList.remove("new-table-name");
         hasChanges = false;
       }
+    } catch (err) {
+      handleError(err);
+    }
+  }
+
+  function creationStmt() {
+    try {
+      let columnMeta = getNewColumnMeta();
+
+      let query = `
+        ${[...columnMeta].map((col) => {
+          return `\n"${col[0]}" ${col[1]}`
+        })},\nPRIMARY KEY ("${id('pk').value}"${qs("tr[data-name='" + id('pk').value + "'] .ai").checked ? " AUTOINCREMENT" : ""})
+      `.trim();
+
+      return query;
     } catch (err) {
       handleError(err);
     }
@@ -109,9 +141,25 @@
    * @returns formatted information abotu newly created columns
    */
   function getNewColumnMeta() {
-    let newColumns = qsa(".new-col");
-    return [...newColumns].map((col) => {
-      let def = `${col.querySelector("select").value} ${col.querySelector(".nn").checked ? "NOT NULL" : ""} ${col.querySelector(".u").checked ? "UNIQUE" : ""}`.trim();
+    let columns = [...qsa("#row-builder tr")];
+    columns.shift();
+
+    const DEFAULTS = {
+      "INTEGER": -1,
+      "REAL": -1.0,
+      "TEXT": "-",
+      "BLOB": "-",
+    }
+
+    
+    return [...columns].map((col) => {
+      let defaultValue = col.querySelector(".def").value;
+
+      if (col.querySelector(".nn").checked && !col.querySelector(".def").value) {
+        defaultValue = DEFAULTS[col.querySelector("select").value]
+      };
+
+      let def = `${col.querySelector("select").value} ${col.querySelector(".nn").checked ? "NOT NULL" : ""} ${col.querySelector(".u").checked ? "UNIQUE" : ""} ${defaultValue ? `DEFAULT "${defaultValue}"` : ""}`.trim();
       return [col.querySelector(".col-name").textContent, def];
     });
   }
@@ -137,16 +185,14 @@
     try {
       let meta = await getTableMeta();
       let columnInfo = await getTableColumns();
+      let constraints = await getConstraints();
 
-      console.log(columnInfo);
-
-      id("create-table-query").textContent = meta.sql;
       id("table-name").value = meta.name;
 
-      buildColumnOptions(columnInfo);
+      buildColumnOptions(columnInfo, constraints["results"]);
 
     } catch (err) {
-      handleError(err.message);
+      handleError(err);
     }
   }
 
@@ -155,12 +201,12 @@
    * @param {Object} columns - stores information about the columns
    * in a table
    */
-  function buildColumnOptions(columns) {
+  function buildColumnOptions(columns, constraints) {
     buildPkSelection(columns);
 
-    for (const column of columns.columns) {
-      buildRow(false, column, columns.pk === column, columns.isAutoincrement);
-    }
+    columns.columns.forEach((column, i) => {
+      buildRow(false, constraints[i], columns.types[i], column, columns.pk === column, columns.isAutoincrement);
+    })
   }
 
   /**
@@ -194,7 +240,7 @@
    * @param {Boolean} pk - whether or not the current column is the primary key
    * @param {Boolean} ai - whether or not the current table autoincrements
    */
-  function buildRow(isNew = true, column, pk = false, ai = false) {
+  function buildRow(isNew = true, constraints, colType, column, pk = false, ai = false) {
     column = column || `Column ${qsa("#row-builder tr").length}`;
 
     let row = document.createElement("tr");
@@ -209,23 +255,38 @@
 
     let typeHolder = document.createElement("td");
     let typeDropdown = document.createElement("select");
+    typeDropdown.addEventListener("change", () => {hasChanges = true});
+
     SQLITE_TYPES.forEach((type) => {
       let optn = document.createElement("option");
       optn.value = type;
       optn.textContent = type;
 
+      if (type === colType) {
+        optn.selected = true;
+      }
+
       typeDropdown.appendChild(optn);
     });
     typeHolder.appendChild(typeDropdown);
+
+    let defaultHolder = document.createElement("td");
+    let defaultInput = document.createElement("input");
+    defaultInput.classList.add("def");
+    defaultInput.name = `row-${qsa("#row-builder tr").length}-default`;
+    defaultInput.type = "text";
+    defaultHolder.appendChild(defaultInput);
+    defaultInput.value = constraints?.default || "";
     
     row.append(
       closeButton(),
       nameHolder,
       typeHolder,
-      checkBox("nn", pk, ai),
+      checkBox("nn", pk, ai, constraints?.nn),
       checkBox("ai", pk, ai),
-      checkBox("u", pk, ai),
-      checkBox("fk", pk, ai)
+      checkBox("u", pk, ai, constraints?.u),
+      checkBox("fk", pk, ai, ),
+      defaultHolder
     );
 
     if (pk) {
@@ -255,20 +316,26 @@
    * @param {Boolean} ai - whether or not the current primary key autoincrements
    * @returns A checkbox input
    */
-  function checkBox(nme, pk, ai) {
+  function checkBox(nme, pk, ai, isChecked = false) {
     let checkboxHolder = document.createElement("td");
     let checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.classList.add(nme);
     checkbox.name = `row-${qsa("#row-builder tr").length}-${nme}`;
+    checkbox.checked = isChecked;
 
     checkboxHolder.appendChild(checkbox);
 
     if (nme === "ai" && !pk) {
       checkbox.disabled = true;
-    } else if (ai) {
+    } else if (ai && pk && nme === "ai") {
       checkbox.checked = true;
     }
+
+    checkbox.addEventListener("click", () => {
+      hasChanges = true;
+    });
+
     return checkboxHolder;
   }
 
@@ -299,15 +366,19 @@
    */
   async function deleteColFromTable() {
     try {
-      let colname = this.closest("tr").dataset.name;
+      let colname = `"${this.closest("tr").dataset.name}"`;
       alert(`Are you sure you want to delete the column "${colname}"? (This will remove all data stored in this column!)`);
 
-      if (this.closest("tr").classList.contains("new-col")) {
-        this.closest("tr").remove()
-      } else {
+      if (!this.closest("tr").classList.contains("new-col")) {
         // delete from table for real
+        let res = await ipc.invoke("delete-col", colname);
+        if (res.type === "err") {
+          throw new Error(res.err);
+        }
       }
-      // await ipc.invoke("delete-col", colname);
+
+      qs(`#pk[value='${this.closest("tr").dataset.name}']`)
+      this.closest("tr").remove();
     } catch (err) {
       handleError(err);
     }
@@ -364,6 +435,7 @@
    * @param {String} message - the message to display
    */
   function handleError(message) {
+    console.error(message);
     alert(message);
   }
 })();

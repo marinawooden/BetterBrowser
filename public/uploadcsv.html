@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Meta -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upload CSV</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;600&family=Schibsted+Grotesk&family=Wix+Madefor+Display:wght@500&display=swap" rel="stylesheet">
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="./stylesheets/index.css">
+  <link rel="stylesheet" href="./stylesheets/uploadcsv.css">
+  <!-- JS -->
+  <script src="./scripts/uploadcsv.js"></script>
+</head>
+<body>
+  <main>
+    <h1>Upload CSV</h1>
+    <p>Table Name:</p>
+    <input type="text" id="table-name" placeholder="Table 1">
+    <div id="advanced-settings">
+      <div class="side-by-side">
+        <p>Advanced Settings</p>
+        <img src="./images/triangle.svg" id="advanced-toggler" alt="toggling triangle">
+      </div>
+      <div id="advanced-dropdown" class="transparent">
+        <div class="side-by-side">
+          <input type="checkbox" id="first-row">
+          <p>Column names from first row</p>
+        </div>
+        <div class="side-by-side">
+          <p>Field separator:</p>
+          <input type="text" value="," id="separator" name="separator"/>
+        </div>
+      </div>
+    </div>
+    <div id="table-preview">
+      <table>
+        <thead>
+          <tr>
+            <th>Column 1</th>
+            <th>Column 2</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>1</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>2</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,51 @@
+.side-by-side {
+  display: flex;
+  align-items: center;
+  justify-content: left;
+}
+
+#advanced-toggler {
+  height: 10px;
+  width: 10px;
+  margin: 0 5px;
+  transform: rotate(90deg);
+  transition: 0.5s transform;
+}
+
+#advanced-toggler.toggled {
+  transform: rotate(180deg);
+}
+
+#advanced-dropdown {
+  transition: 0.5s all;
+  margin-bottom: 1em;
+}
+
+.transparent {
+  opacity: 0;
+  transform: translateY(-10px);
+  max-height: 0;
+  overflow: hidden;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+#advanced-settings input,
+#advanced-settings select {
+  margin-right: 0.5em;
+}
+
+#advanced-settings > div:not(:first-of-type) {
+  background-color: var(--bg-darker);
+  border-radius: 10px;
+  padding: 1em;
+}
+
+#advanced-settings select {
+  padding: 0;
+  font-family: 'Inconsolata', monospace;
+}
+
+#advanced-settings div .side-by-side p {
+  margin: 0.5em 0;
+}

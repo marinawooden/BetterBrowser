@@ -11,10 +11,8 @@
     id("data-options-toggler").addEventListener("click", () => id("data-options").classList.toggle("collapsed"));
     id("add-database-button").addEventListener("click", addDatabase);
     id("clear-connections").addEventListener("click", promptForClear);
-    id("table-name").addEventListener("change", (e) => openTableView(e.currentTarget.value));
-    id("open-database-button").addEventListener("click", async () => {
-      await openDatabase()
-    });
+    id("table-name").addEventListener("change", async (e) => await openTableView(e.currentTarget.value));
+    id("open-database-button").addEventListener("click", () => openDatabase());
     id("page-next").addEventListener("click", nextPage);
     id("page-back").addEventListener("click", prevPage);
     id("sql-executor").addEventListener("click", executeSql);
@@ -77,6 +75,7 @@
       }
 
       await populateDbView();
+      await populateDataViewerOptions();
     } catch (err) {
       alert(err.message);
     }
@@ -109,6 +108,13 @@
 
       newRows.forEach((row) => {
         row.classList.remove("new-row");
+        // row.addEventListener("")
+        row.querySelectorAll("td").forEach((col) => {
+          col.addEventListener("input", function() {
+            this.closest("tr").classList.add("modified");
+            qs("a[href='#viewer']").classList.add("unsaved");
+          });
+        })
       });
 
       qsa(".modified").forEach((row) => {
@@ -165,11 +171,14 @@
         }
 
         newCol.contentEditable = true;
-        newRow.appendChild(newCol)
+        newRow.appendChild(newCol);
       }
 
-      table.appendChild(newRow);
+      table.insertBefore(newRow, table.querySelector("tr").nextSibling);
 
+      if (table.querySelectorAll("tr").length > 11) {
+        table.removeChild(table.lastChild);
+      }
     } catch (err) {
       alert(err);
     }
@@ -190,23 +199,33 @@
     try {
       let activeTable = id("table-name").value;
       let rows = qsa("#table-view table input[type='checkbox']:checked");
-      let rowIds = [...rows].map((row) => {
+      let rowIds = [...rows].filter((row) => {
+        // console.log(row.closest("tr").classList.contains(""));
+        return !row.closest("tr").classList.contains("new-row")
+      }).map((row) => {
         return row.closest("tr").id
       });
 
-      if (activeTable && rows.length > 0) {
+      console.log(rowIds);
+
+      if (activeTable && rowIds.length > 0) {
         await sendRowsToDeletion(rowIds, activeTable);
         [...rows].forEach((row) => {
           row.closest('tr').remove();
         });
-
-        id("data-options").classList.add("collapsed");
-      } else {
-        // kind of not descriptive, since also fails if no activeTable selected.
-        // still, there's really no case when an activeTable *isn't* selected, unless
-        // something goes terribly wrong.
-        throw new Error("Select a row to remove!")
       }
+
+      id("data-options").classList.add("collapsed");
+      // HERE
+      await openTableView(activeTable);
+      rows.forEach((row) => {
+        row.closest("tr").remove();
+      });
+
+      if (qsa(".new-row, .modified").length === 0 && qs(".unsaved")) {
+        qs(".unsaved").classList.remove("unsaved");
+      }
+
     } catch (err) {
       alert(err.message);
     }
@@ -366,6 +385,11 @@
       edit.addEventListener("click", async () => {
         try {
           await ipc.invoke("open-editor", table.tbl);
+
+          ipc.once("edits-complete", async () => {
+            await populateDbView();
+            await populateDataViewerOptions();
+          });
         } catch (err) {
           alert(err.message);
         }
@@ -408,7 +432,8 @@
     try {
       ipc.invoke("table-creator");
       // Send back message once created, populate tables
-      ipc.once("test", () => {
+      ipc.once("table-added", () => {
+        alert("TABLE ADDED")
         populateDbView();
         populateDataViewerOptions();
       });
@@ -444,14 +469,19 @@
 
   async function openDatabase(dbPath = "") {
     try {
+      console.log("DB PAth");
+      console.log(dbPath)
       let currentDb = await ipc.invoke('open-database', dbPath);
-      setCurrentDbName(currentDb);
-      await populateDbView();
-      await populateDataViewerOptions();
-      
-      // get current db and prepend it.
-
+      if (currentDb.type === "err") {
+        throw new Error(currentDb.err);
+      } else if (currentDb.type === "success") {
+        setCurrentDbName(currentDb["res"]);
+        await getRecentConnections();
+        await populateDbView();
+        await populateDataViewerOptions();
+      }
     } catch (err) {
+      console.error(err);
       alert(err);
     }
   }
@@ -577,6 +607,8 @@
 
         if (tableData.data.length % 10 !== 0) {
           id("page-next").classList.add("invisible");
+        } else {
+          id("page-next").classList.remove("invisible");
         }
       } else {
         let footer = document.createElement("div");
@@ -628,8 +660,10 @@
     meta.append(title, loc);
     connectionFrame.append(icon, meta);
 
-    connectionFrame.addEventListener("click", async (e) => {
+    connectionFrame.addEventListener("click", async function() {
       await openDatabase(conn);
+      // become first item
+      this.parentNode?.insertBefore(this, id("recent-connections").firstChild);
     })
 
     return connectionFrame;
