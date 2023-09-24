@@ -117,7 +117,7 @@ const ipc = require('electron').ipcRenderer;
     uniqTd.appendChild(uniqueCheck);
 
     let fk = checkBox(`row-${rowNum}-fk`);
-    fk.addEventListener("change", () => alert("THE"));
+    fk.addEventListener("change", createFkInput);
     fornTd.appendChild(fk);
 
     let defV = document.createElement("input");
@@ -141,6 +141,35 @@ const ipc = require('electron').ipcRenderer;
     row.append(closTd, nameTd, typeTd, nonNTd, autoTd, uniqTd, fornTd, defVTd);
     addRowToQuery(colName ? colName : `Field${rowNum}`);
     return row;
+  }
+
+  function createFkInput() {
+    // create foreign key input
+    let table = this.closest("table");
+    let rows = table.querySelectorAll("tr");
+
+    rows.forEach((row, i) => {
+      if (i === 0 && !qs(".fk")) {
+        let rowHead = document.createElement("th");
+        rowHead.textContent = "Foreign Keys";
+
+        row.appendChild(rowHead);
+      } else if (row.querySelector("input[name='row-" + i + "-fk']:checked")) {
+
+        let rowSelectHolder = document.createElement("td");
+        let rowSelect = document.createElement("select");
+        ["Option 1", "Option 2", "Option 3"].forEach((optn) => {
+          let optnElem = document.createElement("option");
+          optnElem.value = optn;
+          optnElem.textContent = optn;
+          rowSelect.append(optnElem);
+        });
+
+        rowSelectHolder.classList.add("fk");
+        rowSelectHolder.appendChild(rowSelect);
+        row.appendChild(rowSelectHolder);
+      }    
+    })
   }
 
   function addRowToQuery(colName) {
@@ -239,7 +268,6 @@ const ipc = require('electron').ipcRenderer;
 
   async function makeNewTable(e) {
     e.preventDefault();
-
     try {
       let query = qs("#create-table-query").textContent;
       let tables = await ipc.invoke('add-table', query);

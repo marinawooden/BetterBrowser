@@ -55,7 +55,11 @@
 
   async function getConstraints() {
     let res = await ipc.invoke("get-constraints");
-    return res;
+    if (res.type !== "err") {
+      return res;
+    } else {
+      throw new Error(res.err);
+    }
   }
 
   /**
@@ -80,7 +84,7 @@
   async function saveNewChanges() {
     try {
       if (!hasChanges) {
-        noNewChanges();
+        changesPopup(false);
       } else {
         let qry = await ipc.invoke("update-table", creationStmt(), id("table-name").value);
         if (qry.type === "err") {
@@ -98,6 +102,8 @@
 
         qs("new-table-name")?.classList.remove("new-table-name");
         hasChanges = false;
+
+        changesPopup(true);
       }
     } catch (err) {
       handleError(err);
@@ -165,11 +171,11 @@
   }
 
   /** Displays a brief popup indicating there are no new changes to the page */
-  function noNewChanges() {
+  function changesPopup(hasChanges) {
     let popup = document.createElement("div");
     popup.id = "changes-popup";
-    popup.classList.add("none")
-    popup.textContent = "No New Changes!";
+    popup.classList.add(!hasChanges ? "none" : "green")
+    popup.textContent = !hasChanges ? "No New Changes!" : "Saved Changes";
 
     id("update-table").appendChild(popup);
 
@@ -216,6 +222,7 @@
    * in a table
    */
   function buildPkSelection(columns) {
+    console.log(columns);
     let colnames = columns.columns;
     let pk = columns.pk;
 
@@ -390,7 +397,11 @@
    */
   async function getTableColumns() {
     let res = await ipc.invoke("new-row-meta");
-    return res
+    if (res.type !== "err") {
+      return res
+    } else {
+      throw new Error(res.err);
+    }
   }
 
   /**
@@ -399,7 +410,11 @@
    */
   async function getTableMeta() {
     let res = await ipc.invoke("get-table-meta");
-    return res;
+    if (res.type !== "err") {
+      return res;
+    } else {
+      throw new Error(res.err);
+    }
   }
 
   /** HELPER FUNCTIONS THAT I PROBABLY SHOULD HAVE IMPORTED.  YOLO */

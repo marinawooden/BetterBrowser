@@ -32,6 +32,11 @@
     });
 
     getRecentConnections();
+
+    ipc.once("edits-complete", async () => {
+      await populateDbView();
+      await populateDataViewerOptions();
+    });
   }
 
   async function confirmDeleteTable(table) {
@@ -52,7 +57,10 @@
     yes.classList.add("yes");
     no.classList.add("no");
 
-    no.addEventListener("click", () => popup.remove())
+    no.addEventListener("click", () => {
+      qs("#database-structure div:not(.collapsed)")?.classList.add("collapsed");
+      popup.remove();
+    })
     yes.addEventListener("click", async () => {
       await deleteTable(table);
       popup.remove();
@@ -200,13 +208,10 @@
       let activeTable = id("table-name").value;
       let rows = qsa("#table-view table input[type='checkbox']:checked");
       let rowIds = [...rows].filter((row) => {
-        // console.log(row.closest("tr").classList.contains(""));
         return !row.closest("tr").classList.contains("new-row")
       }).map((row) => {
         return row.closest("tr").id
       });
-
-      console.log(rowIds);
 
       if (activeTable && rowIds.length > 0) {
         await sendRowsToDeletion(rowIds, activeTable);
@@ -273,7 +278,6 @@
           throw new Error(res.err)
         }
 
-        console.log(res);
         id("query-details").innerHTML = "";
         
         if (res.data) {
@@ -358,16 +362,28 @@
     }
   }
 
+  async function closeDbConnection() {
+    alert("NOOO! I HAVEN'T IMPLEMENT THIS YET")
+  }
+
   function createDbViewContainer(dbInfo) {
     let holder = document.createElement("ul");
     let titlLi = document.createElement("li");
     let colsUl = document.createElement("ul");
     let dividr = document.createElement("hr");
+    let title = document.createElement("div");
+    let titleText = document.createElement("p");
+    let closeDb = document.createElement("p");
     
     holder.id = "database-structure";
-    titlLi.textContent = dbInfo.db
+    titleText.textContent = dbInfo.db;
 
-    titlLi.appendChild(dividr);
+    closeDb.textContent = "Close Connection";
+    closeDb.id = "close-connection";
+    closeDb.addEventListener("click", closeDbConnection);
+
+    title.append(titleText, closeDb);
+    titlLi.append(title, dividr);
 
     dbInfo.tables.forEach((table) => {
       let tblLi = document.createElement("li");
@@ -385,11 +401,6 @@
       edit.addEventListener("click", async () => {
         try {
           await ipc.invoke("open-editor", table.tbl);
-
-          ipc.once("edits-complete", async () => {
-            await populateDbView();
-            await populateDataViewerOptions();
-          });
         } catch (err) {
           alert(err.message);
         }
@@ -413,29 +424,63 @@
     let lastLi = document.createElement("li");
     lastLi.id = "add-table";
     lastLi.textContent = "+ Add Table";
+    lastLi.addEventListener("click", () => {
+      id("add-table-options").classList.toggle("collapsed");
+    });
 
-    /** TODO: Add table functionality */
-    lastLi.addEventListener("click", promptForTableType)
+    let addTableOptions = document.createElement("div");
+    let fromCSV = document.createElement("p");
+    let manual = document.createElement("p");
 
+    addTableOptions.id = "add-table-options";
+    addTableOptions.classList.add("collapsed");
+
+    fromCSV.textContent = "From CSV";
+    manual.textContent = "Manual Entry";
+
+    fromCSV.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openCSVPrompt();
+    })
+
+    manual.addEventListener("click", (e) => {
+      e.stopPropagation();
+      addManualTable();
+    })
+
+    addTableOptions.append(manual, fromCSV);
+
+    lastLi.appendChild(addTableOptions);
     colsUl.appendChild(lastLi);
 
     titlLi.appendChild(colsUl);
     holder.appendChild(titlLi);
-    return holder
+    return holder;
   }
 
   function gen(tag) {
     return document.createElement(tag);
   }
 
-  async function promptForTableType() {
+  async function openCSVPrompt() {
+    try {
+      ipc.invoke("csv-select");
+      ipc.once("table-added", async () => {
+        await populateDbView();
+        await populateDataViewerOptions();
+      });
+    } catch (err) {
+      alert(err);
+    }
+  }
+
+  async function addManualTable() {
     try {
       ipc.invoke("table-creator");
       // Send back message once created, populate tables
-      ipc.once("table-added", () => {
-        alert("TABLE ADDED")
-        populateDbView();
-        populateDataViewerOptions();
+      ipc.once("table-added", async () => {
+        await populateDbView();
+        await populateDataViewerOptions();
       });
     } catch (err) {
       alert(err);
@@ -445,8 +490,6 @@
   async function getTables() {
     try {
       let tables = await ipc.invoke('retrieve-tables');
-
-      console.log(tables["tables"]);
       
       return {
         "db": tables["db"],
@@ -460,7 +503,6 @@
   async function getDataFromTable(table) {
     try {
       let tableData = await ipc.invoke('view-data', table, pageViewing);
-      console.log(tableData);
       return tableData;
     } catch (err) {
       alert(err);
@@ -469,8 +511,6 @@
 
   async function openDatabase(dbPath = "") {
     try {
-      console.log("DB PAth");
-      console.log(dbPath)
       let currentDb = await ipc.invoke('open-database', dbPath);
       if (currentDb.type === "err") {
         throw new Error(currentDb.err);

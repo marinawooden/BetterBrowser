@@ -10,6 +10,10 @@ const sqlite = require('sqlite');
 const Store = require('electron-store');
 const store = new Store();
 
+const fs = require('fs');
+const { parse } = require('csv-parse');
+const { finished } = require('stream/promises');
+
 let db;
 let currentDBPath;
 let win;
@@ -17,6 +21,7 @@ let tableCreator;
 let tableEditor;
 let editingTable;
 let csvUpload;
+let csvPath;
 
 const openTableCreator = () => {
   tableCreator = new BrowserWindow({
@@ -66,7 +71,126 @@ const openTableEditor = () => {
   tableEditor.loadFile('public/tableeditor.html')
 }
 
-ipcMain.handle("get-constraints", async (even, ...args) => {
+async function processCSVFile(delimiter = ",", firstRowIsColumns) {
+  const records = [];
+  const parser = fs
+    .createReadStream(csvPath)
+    .pipe(parse({
+        delimiter: delimiter, // Change this to the delimiter used in your CSV file
+        columns: firstRowIsColumns, // Set this to true if your CSV file has headers
+      }));
+
+  parser.on('readable', function(){
+    let record; while ((record = parser.read()) !== null) {
+    // Work with each record
+      records.push(record);
+    }
+  });
+  await finished(parser);
+  return records;
+}
+
+ipcMain.handle("create-from-csv", async (event, ...args) => {
+  try {
+    if (!csvPath) {
+      throw new Error("No filepath was specified");
+    }
+
+    const records = await processCSVFile(args[1], args[2]);
+    let colNames = args[2] ? Object.keys(records[0]) : args[3];
+    
+    colNames = colNames.map((col, i) => {
+      let value = records[1][Object.keys(records[0])[i]];
+      return {
+        name: col,
+        type: /^[0-9]*$/.test(value) ? "INTEGER" : /^[0-9]*\.[0-9]*$/.test(value) ? "REAL" : "TEXT"
+      }
+    });
+
+    const creationStmt = colNames.map((e) => {
+      return `\n"${e.name}" ${e.type}`
+    });
+
+    creationStmt.push('\nPRIMARY KEY("id")');
+
+    let query = "BEGIN TRANSACTION;\n";
+    query += `\nCREATE TABLE "${args[0]}" (${creationStmt.toString()}\n);`
+
+    let insertStatements = records.map((row) => {
+      return `\nINSERT INTO "${args[0]}" (${colNames.map((e) => e.name).toString()}) VALUES (${formatColumns(Object.values(row))})`
+    });
+
+    query += insertStatements.join(";");
+
+    console.log(query);
+    await db.exec(query);
+    await db.exec("COMMIT;");
+
+    win.webContents.send("edits-complete");
+    csvUpload.close();
+
+    return {
+      "type": "success"
+    }
+  } catch (err) {
+    await db.exec("ROLLBACK;");
+    console.log(err);
+    return {
+      "type": "err",
+      "err": err
+    }
+  }
+});
+
+ipcMain.handle("get-csv-data", async (event, ...args) => {
+  try {
+    if (!csvPath) {
+      throw new Error("No filepath was specified");
+    }
+
+    const records = await processCSVFile(args[0], args[1]);
+    console.log(records);
+
+    return {
+      "type": "success",
+      "content": records.slice(0, 10)
+    }
+
+  } catch (err) {
+    return {
+      "type": "err",
+      "err": err
+    }
+  }
+});
+
+ipcMain.handle("csv-select", async (event, ...args) => {
+  try {
+    let pathSelect = await openCSVDialog();
+    if (pathSelect["canceled"]) {
+      return {
+        "type": "passive",
+      }
+    }
+    
+    csvPath = pathSelect["filePaths"][0];
+    await openCSVEditor();
+
+    return {
+      "type": "success"
+    }
+  } catch (err) {
+    return {
+      "type": "err",
+      "err": err
+    }
+  }
+});
+
+/**
+ * Retrieves constraints for a table
+ */
+ipcMain.handle("get-constraints", async () => {
   try {
     if (!editingTable || !db) {
       throw new Error("No table or database currently open!");
@@ -155,8 +279,8 @@ ipcMain.handle('update-table', async (event, ...args) => {
 
     query += `\nCREATE TABLE ${tmpname} (\n${creationStmt}\n);`;
     query += `\nINSERT INTO ${tmpname} (${ogColumns.toString()}) SELECT * FROM '${editingTable}';`
-    query += `\nDROP TABLE ${editingTable};`
-    query += `\nALTER TABLE ${tmpname} RENAME TO '${newName}';`
+    query += `\nDROP TABLE "${editingTable}";`
+    query += `\nALTER TABLE ${tmpname} RENAME TO "${newName}";`
 
     console.log("QUERY");
     console.log(query);
@@ -288,7 +412,7 @@ ipcMain.handle('delete-table', async (event, ...args) => {
       throw new Error("Please provide a table name");
     }
 
-    let query = `DROP TABLE IF EXISTS ${tablename}`;
+    let query = `DROP TABLE IF EXISTS "${tablename}"`;
     await db.exec(query);
 
     return {
@@ -340,10 +464,10 @@ ipcMain.handle('save-changes', async (event, ...args) => {
       }
     }
 
-    console.log(qry);
     await db.exec(qry);
     await db.exec("COMMIT;");
 
+    win.webContents.send("edits-complete");
 
     return {
       "type": "success"
@@ -411,7 +535,7 @@ ipcMain.handle('new-row-meta', async (event, ...args) => {
     }
 
     let isAutoincrement = await db.get("SELECT * FROM sqlite_master WHERE type = 'table' AND name = ? AND sql LIKE '%AUTOINCREMENT%'", table);
-    let columns = await db.all(`PRAGMA table_info(${table})`);
+    let columns = await db.all(`PRAGMA table_info("${table}")`);
     let pk = columns.find((col) => col.pk === 1);
     let lastid;
 
@@ -452,11 +576,10 @@ ipcMain.handle('remove-rows', async (event, ...args) => {
     if (rows.length > 0) {
       // TODO: Yikes
       // Also, I feel like we can do `pk` by modifying `getPk`.  Don't want to rewrite rn though
-      let columns = await db.all(`PRAGMA table_info(${table})`);
+      let columns = await db.all(`PRAGMA table_info("${table}")`);
       let pk = columns.find((col) => col.pk === 1);
 
-      let query = `DELETE FROM "${table}" WHERE "${pk["name"]}" in (${rows.toString()})`;
-      console.log(query);
+      let query = `DELETE FROM "${table}" WHERE "${pk["name"]}" in (${formatColumns(rows)})`;
       let start = Date.now();
       let meta = await db.run(query);
 
@@ -488,7 +611,7 @@ ipcMain.handle('get-table-meta', async (event, ...args) => {
 
       if (results) {
         // TODO: Fun- sql injection potentially
-        let getPk = "PRAGMA table_info(" + tblname + ")";
+        let getPk = 'PRAGMA table_info("' + tblname + '")';
         let columns = await db.all(getPk);
         let pk = columns.find((col) => col.pk === 1);
 
@@ -620,7 +743,6 @@ ipcMain.handle('recent-connections', async () => {
 ipcMain.handle('open-database', async (event, ...args) => {
   try {
     let dbPath = args[0];
-    console.log("REACHED POINT")
     if (!dbPath) {
       let pathSelect = await openDatabaseDialog();
       
@@ -638,7 +760,7 @@ ipcMain.handle('open-database', async (event, ...args) => {
 
       let existing = store.get('recent-db');
 
-      console.log(existing);
+      // console.log(existing);
       if (!existing) {
         store.set('recent-db', [dbPath]);
       } else if (!existing.includes(dbPath)) {
@@ -767,6 +889,22 @@ async function openDatabaseDialog() {
     title: 'Select a Database',
     filters: [
       { name: 'Database', extensions: ['db'] },
+    ],
+    properties: ['openFile']
+  }
+
+  return dialog.showOpenDialog(options);
+}
+
+/**
+ * Opens up a dialog so that the user can select their csv files
+ * @returns The dialog window to interact with
+ */
+async function openCSVDialog() {
+  const options = {
+    title: 'Select a CSV File',
+    filters: [
+      { name: 'CSV File', extensions: ['csv'] },
     ],
     properties: ['openFile']
   }

@@ -33,8 +33,15 @@ body {
   cursor: pointer;
 }
 
+#add-table-options {
+  display: flex;
+  margin-top: 0.4em;
+  transition: 0.5s opacity, 0.5s transform, 0.2s max-height;
+}
+
 button {
   transition: transform .5s ease;
+  cursor: pointer;
 }
 
 button:hover {
@@ -93,6 +100,18 @@ button {
   cursor: pointer;
 }
 
+#database-structure li > div > #close-connection {
+  margin-right: 0;
+  color: salmon;
+  cursor: pointer;
+  transition: 0.5s all;
+}
+
+#database-structure li > div > #close-connection:hover {
+  color: rgb(255, 177, 169)
+}
+
+
 table {
   width: calc(100% - 1em);
   text-align: left;
@@ -131,12 +150,19 @@ th:first-of-type {
   transform-origin: top;
 }
 
-#data-options.collapsed {
-  transform: translateY(-8px);
-  opacity: 0;
-  animation: 0.1s hide-totally forwards;
-  animation-delay: 0.5s;
+.collapsed {
+  transform: translateY(-8px) !important;
+  opacity: 0 !important;
+  height: 0 !important;
+  animation: 0.1s hide-totally forwards !important;
+  animation-delay: 0.5s !important;
+  margin: 0 !important;
 }
+
+#database-structure > li > div {
+  display: flex;
+  justify-content: space-between;
+} 
 
 nav a {
   display: flex;
@@ -188,7 +214,9 @@ a.unsaved::before {
 }
 
 #database-structure li > p + div {
+  display: flex;
   opacity: 1;
+  margin-left: 1.5em;
   max-height: 500px;
   transition: 0.5s opacity, 0.5s transform, 0.2s max-height;
 }
@@ -196,6 +224,7 @@ a.unsaved::before {
 #database-structure li > p + div.collapsed {
   opacity: 0;
   max-height: 0px;
+  overflow: hidden;
   transform: translateY(-3px);
 }
 
@@ -248,9 +277,10 @@ p.delete:hover {
   pointer-events: all;
 }
 
-#database-structure li > div {
+
+#database-structure > li > div {
   display: flex;
-  margin-left: 1.5em;
+  margin: 0 0.5em;
 }
 
 #database-structure li > div > p {
@@ -436,7 +466,7 @@ th {
 
 td,
 th {
-  padding: .5em 0;
+  padding: .5em;
 }
 
 table p {
@@ -650,7 +680,7 @@ dialog {
   margin: 1em auto;
   max-height: 125px;
   background-color: rgb(35, 40, 40);
-  border-radius: 15px;
+  border-radius: 7px;
   color: var(--text-highlight);
   text-align: center;
   border: 0;
@@ -659,15 +689,44 @@ dialog {
   top: 50%;
   transform: translate(-50%, -50%);
   background-image: linear-gradient(var(--bg-primary), transparent);
-  background-color: var(--bg-darker);
+  background-color: rgb(23 23 26);
   border: 1px solid rgb(75, 78, 78);
-  box-shadow: 0 0 50px 4px black;
+  box-shadow: 0 0 50px 4px #000000c9;
 }
 
 dialog::backdrop {
-  background-color: #00000094;
+  background-color: #1f1e1d94;
 }
 
 dialog button {
   outline: none
+}
+
+dialog[open] {
+  animation: 0.7s dialog-entrance forwards;
+}
+
+
+#add-table-options p {
+  margin: 0 0 0 1em;
+}
+
+#add-table-options p:nth-of-type(1) {
+  color: #03bbffa8
+}
+
+#add-table-options p:nth-of-type(2) {
+  color: #ffa500a8
+}
+
+
+
+@keyframes dialog-entrance {
+  from {
+    opacity: 0
+  }
+
+  to {
+    opacity: 1
+  }
 }

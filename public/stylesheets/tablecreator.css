@@ -162,6 +162,10 @@ select {
   color: salmon;
 }
 
+#changes-popup.green {
+  color: rgb(137, 169, 137);
+}
+
 @keyframes fade-and-pop {
   from {
     opacity: 1;
