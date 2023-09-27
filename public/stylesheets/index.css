@@ -3,6 +3,17 @@ font-family: 'Inconsolata', monospace;
 font-family: 'Schibsted Grotesk', sans-serif;
 */
 
+/* Hide scrollbar for Chrome, Safari and Opera */
+::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+html {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
 body {
   font-size: 13px;
 }
@@ -121,6 +132,15 @@ table {
 
 th:first-of-type {
   width: 5em;
+}
+
+#pagination-holder {
+  height: 25px;
+  bottom: 0;
+  position: fixed;
+  width: 100%;
+  background-color: var(--bg-primary);
+  padding-top: 1em;
 }
 
 #table-page-toggle {

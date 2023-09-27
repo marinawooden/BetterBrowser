@@ -10,6 +10,7 @@ const sqlite = require('sqlite');
 const Store = require('electron-store');
 const store = new Store();
 
+const fsasync = require('fs').promises;
 const fs = require('fs');
 const { parse } = require('csv-parse');
 const { finished } = require('stream/promises');
@@ -90,6 +91,26 @@ async function processCSVFile(delimiter = ",", firstRowIsColumns) {
   return records;
 }
 
+ipcMain.handle("close-db-connection", async (event, ...args) => {
+  try {
+    if (!db) {
+      throw new Error("No database currently open!");
+    }
+
+    await db.close();
+    db = null;
+
+    return {
+      type: "success"
+    }
+  } catch (err) {
+    return {
+      type: "error",
+      error: err
+    }
+  }
+});
+
 ipcMain.handle("create-from-csv", async (event, ...args) => {
   try {
     if (!csvPath) {
@@ -126,7 +147,9 @@ ipcMain.handle("create-from-csv", async (event, ...args) => {
     await db.exec(query);
     await db.exec("COMMIT;");
 
-    win.webContents.send("edits-complete");
+    win.webContents.send("table-added");
+
+    // win.webContents.send("edits-complete");
     csvUpload.close();
 
     return {
@@ -743,20 +766,40 @@ ipcMain.handle('recent-connections', async () => {
 ipcMain.handle('open-database', async (event, ...args) => {
   try {
     let dbPath = args[0];
+    let sqlPath;
+
     if (!dbPath) {
       let pathSelect = await openDatabaseDialog();
       
       if (!pathSelect["canceled"]) {
-        dbPath = pathSelect["filePaths"][0];
+        if (/.sql$/.test(pathSelect["filePaths"][0])) {
+          sqlPath = pathSelect["filePaths"][0];
+          // open new database dialog
+          let selectLocation = openSaveDialog();
+
+          if (!selectLocation["canceled"]) {
+            dbPath = selectLocation;
+          }
+          
+        } else {
+          dbPath = pathSelect["filePaths"][0];
+        }
       }
-    }
-    
-    if (db) {
-      await db.close();
     }
 
     if (dbPath) {
+      if (db) {
+        await db.close();
+        db = null;
+      }
+      
       db = await getDBConnection(dbPath);
+
+      if (sqlPath) {
+        // populate the db
+        let commands = await fsasync.readFile(sqlPath, "utf-8");
+        await db.exec(commands);
+      }
 
       let existing = store.get('recent-db');
 
@@ -859,10 +902,9 @@ async function getDBConnection(name) {
 function openSaveDialog() {
   const options = {
     title: 'Database Location',
-    filters: [{
-      name: "Databases",
-      extensions: ['db']
-    }],
+    filters: [
+      {name: "Databases", extensions: ['db']},
+    ],
     defaultPath: '~/Documents/Databases', // Optional: Provide a default path
     buttonLabel: 'Choose Location', // Optional: Customize the button label
   };
@@ -888,7 +930,8 @@ async function openDatabaseDialog() {
   const options = {
     title: 'Select a Database',
     filters: [
-      { name: 'Database', extensions: ['db'] },
+      { name: 'Database', extensions: ['db', 'sql'] },
+      // { name: "SQL", extensions: ["sql"]},
     ],
     properties: ['openFile']
   }

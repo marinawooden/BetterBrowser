@@ -32,11 +32,6 @@
     });
 
     getRecentConnections();
-
-    ipc.once("edits-complete", async () => {
-      await populateDbView();
-      await populateDataViewerOptions();
-    });
   }
 
   async function confirmDeleteTable(table) {
@@ -91,6 +86,7 @@
 
   async function saveNewChanges() {
     try {
+      
       let newRows = qsa(".new-row");
       let modifiedRows = qsa(".modified");
 
@@ -110,6 +106,7 @@
       let columns = [...qsa("#table-view th:not(:first-of-type)")].map((col) => col.textContent);
 
       let res = await ipc.invoke("save-changes", id("table-name").value, columns, id("pk").textContent, newRowMatrix, modifiedMatrix);
+      
       if (res.type === "err") {
         throw new Error(res.err);
       }
@@ -363,7 +360,18 @@
   }
 
   async function closeDbConnection() {
-    alert("NOOO! I HAVEN'T IMPLEMENT THIS YET")
+    try {
+      let res = await ipc.invoke("close-db-connection");
+      if (res.type === "error") {
+        throw new Error(res.err)
+      }
+
+      id("table-schema-view").innerHTML = "";
+
+    } catch (err) {
+      handleError(err);
+    }
+    // alert("NOOO! I HAVEN'T IMPLEMENT THIS YET")
   }
 
   function createDbViewContainer(dbInfo) {
@@ -401,6 +409,10 @@
       edit.addEventListener("click", async () => {
         try {
           await ipc.invoke("open-editor", table.tbl);
+          ipc.once("edits-complete", async () => {
+            await populateDbView();
+            await populateDataViewerOptions();
+          });
         } catch (err) {
           alert(err.message);
         }
@@ -677,6 +689,13 @@
     } else {
       connections.forEach((conn) => {
         let connectionFrame = createConnectionFrame(conn);
+
+        connectionFrame.addEventListener("click", async function() {
+          await openDatabase(conn);
+          // become first item
+          // id("recent-connections").insertBefore(this, id("recent-connections").firstChild);
+        })
+
         id("recent-connections").appendChild(connectionFrame);
       });
     }
@@ -699,12 +718,6 @@
 
     meta.append(title, loc);
     connectionFrame.append(icon, meta);
-
-    connectionFrame.addEventListener("click", async function() {
-      await openDatabase(conn);
-      // become first item
-      this.parentNode?.insertBefore(this, id("recent-connections").firstChild);
-    })
 
     return connectionFrame;
   }
