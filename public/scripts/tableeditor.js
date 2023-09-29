@@ -86,7 +86,8 @@
       if (!hasChanges) {
         changesPopup(false);
       } else {
-        let qry = await ipc.invoke("update-table", creationStmt(), id("table-name").value);
+        let newColNames = [...qsa(".col-name")].map((col) => `'${col.textContent}'`);
+        let qry = await ipc.invoke("update-table", creationStmt(), id("table-name").value, newColNames);
         if (qry.type === "err") {
           throw new Error(qry.err);
         }

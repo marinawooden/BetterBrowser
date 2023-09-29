@@ -134,6 +134,10 @@ th:first-of-type {
   width: 5em;
 }
 
+.p-1 {
+  padding: 0 0.5em;
+}
+
 #pagination-holder {
   height: 25px;
   bottom: 0;
@@ -452,16 +456,27 @@ select {
   margin: 0
 }
 
+#table-view input[type='text'] {
+  margin: 0 0.5em;
+}
+
 #table-view table {
   margin-bottom: 0;
 }
 
 #table-view div {
   display: flex;
+  align-items: center;
 }
 
-#table-view div {
-  align-items: center;
+#table-view table p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#table-view table tr {
+  width: 100%;
 }
 
 #table-view > div {
@@ -536,7 +551,8 @@ textarea {
 
 
 body > section {
-  flex-grow: 1;
+  flex: 1;
+  overflow: hidden;
 }
 
 button {
@@ -642,6 +658,7 @@ h1, h2,
 body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
+  width: 100vw;
 }
 
 body {

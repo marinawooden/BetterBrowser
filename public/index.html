@@ -5,6 +5,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';" />
+  <meta charset="UTF-8" />
   <script src="./scripts/renderer.js" defer></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -50,9 +51,15 @@
         <div id="table-view">
           <div>
             <div>
-              <p>Table:</p>
-              <select name="table" id="table-name">
-              </select>
+              <div class="p-1">
+                <p>Table:</p>
+                <select name="table" id="table-name">
+                </select>
+              </div>
+              <div class="p-1">
+                <p>Search Table:</p>
+                <input type="text" id="search-table">
+              </div>
             </div>
             <button id="data-options-toggler">
               <img class="options-icon" src="./images/three-dots.svg" alt="more database options" />

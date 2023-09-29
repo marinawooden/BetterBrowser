@@ -24,6 +24,10 @@
       id("data-options").classList.add("collapsed");
     });
 
+    id("search-table").addEventListener("input", () => {
+      testQuery()
+    });
+
     window.addEventListener('keydown', async (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
@@ -32,6 +36,69 @@
     });
 
     getRecentConnections();
+
+    window.addEventListener("resize", responsiveDataViewColumns);
+  }
+
+  async function testQuery(page = 0) {
+    try {
+      let colnames = [...qsa("#table-view th:not(:first-of-type)")].map((elem) => elem.textContent);
+      let tablename = id("table-name").value;
+      let searchterm = id("search-table").value;
+
+      let res = await ipc.invoke("search-table", tablename, colnames, searchterm, page);
+      if (res.type === "err") {
+        throw new Error(res.error);
+      }
+      showSearchResults(res.results);
+    } catch (err) {
+      console.error(err);
+      handleError(err);
+    }
+  }
+
+  function showSearchResults(results) {
+    console.log(results);
+    qsa("#table-view table tr:not(:first-of-type)").forEach((row) => row.remove());
+
+    results.forEach((result) => {
+      let row = document.createElement("tr");
+      let pk = id("pk").textContent;
+
+      let checkboxCol = document.createElement("td");
+      let checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkboxCol.appendChild(checkbox);
+
+      row.append(checkboxCol);
+      
+      [...Object.keys(result)].forEach((col) => {
+        let content = document.createElement("td");
+        let contentHolder = document.createElement("p")
+
+        contentHolder.contentEditable = true;
+        contentHolder.textContent = result[col];
+
+        content.appendChild(contentHolder);
+        row.appendChild(content);
+      });
+
+
+      row.id = result[pk];
+      qs("#table-view table").appendChild(row);
+    });
+
+    responsiveDataViewColumns()
+  }
+
+  function responsiveDataViewColumns() {
+    // the max width
+    let tableWidth = qs("#table-view")?.offsetWidth - 25;
+    let numColumns = qsa("#table-view th").length;
+
+    qsa("#table-view td p, #table-view th p").forEach((elem) => {
+      elem.style.maxWidth = `${tableWidth / numColumns}px`;
+    });
   }
 
   async function confirmDeleteTable(table) {
@@ -263,7 +330,12 @@
     if (id("page-back").classList.contains("invisible")) {
       id("page-back").classList.remove("invisible");
     }
-    openTableView(id("table-name").value);
+
+    if (id("search-table").value.trim().length > 0) {
+      testQuery(pageViewing)
+    } else {
+      openTableView(id("table-name").value);
+    }
   }
 
   async function executeSql() {
@@ -579,12 +651,13 @@
       tables = tables["tables"].map((table) => table.tbl);
 
       id("table-name").innerHTML = "";
+      qs("#table-view > p")?.remove();
 
       if (tables.length === 0) {
         let msg = document.createElement("p");
         msg.textContent = "There's no tables in this database!";
 
-        qs("#table-view > div").classList.add("hidden");
+        qs("#table-view > table").classList.add("hidden");
         id("table-view").appendChild(msg);
       } else {
         // Populate table options
@@ -614,12 +687,15 @@
 
       ["Select", ...tableData.columns.map((col) => col.name)].forEach((column) => {
         let columnName = document.createElement("th");
-        columnName.textContent = column;
+        let columnHolder = document.createElement("p");
+
+        columnHolder.textContent = column;
 
         if (column == tableMeta.pk) {
           columnName.id = "pk";
         }
         
+        columnName.appendChild(columnHolder);
         header.appendChild(columnName);
       });
 
@@ -641,15 +717,22 @@
           row.id = rowData[tableMeta.pk];
   
           [...Object.keys(rowData)].forEach((col) => {
+            let tableWidth = qs("main > section")?.offsetWidth - 25;
+            let numColumns = Object.keys(rowData).length;
             let cell = document.createElement("td");
-            cell.contentEditable = true;
-            cell.textContent = rowData[col];
+            let cellcontainer = document.createElement("p");
 
-            cell.addEventListener("input", function() {
+            cellcontainer.contentEditable = true;
+            cellcontainer.textContent = rowData[col];
+            // cellcontainer.style.maxWidth = `${tableWidth / numColumns}px`;
+            cellcontainer.style.maxWidth = `${tableWidth / numColumns}px`;
+
+            cellcontainer.addEventListener("input", function() {
               this.closest("tr").classList.add("modified");
               qs("a[href='#viewer']").classList.add("unsaved");
             });
-  
+
+            cell.appendChild(cellcontainer);
             row.appendChild(cell);
           });
           dataViewTable.appendChild(row);
@@ -765,5 +848,9 @@
 
   function qsa(query) {
     return document.querySelectorAll(query);
+  }
+
+  function handleError(err) {
+    alert(err)
   }
 })();

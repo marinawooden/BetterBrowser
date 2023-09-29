@@ -91,6 +91,45 @@ async function processCSVFile(delimiter = ",", firstRowIsColumns) {
   return records;
 }
 
+ipcMain.handle("search-table", async (event, ...args) => {
+  try {
+    if (!db) {
+      throw new Error("No database is open!")
+    }
+
+    let tablename = args[0];
+    let columns = args[1];
+    let searchquery = args[2];
+    let page = args[3] || 0;
+
+    if (tablename && columns) {
+      let sqlquery = `SELECT * FROM '${tablename}' WHERE `;
+
+      columns.forEach((colname, i) => {
+        sqlquery += `\`${colname}\` LIKE "%${searchquery}%"${i === columns.length - 1 ? "" : " OR\n"}`;
+      });
+
+      sqlquery += `LIMIT ${page * OFFSET}, ${OFFSET}`;
+
+      let res = await db.all(sqlquery);
+
+      return {
+        "type": "success",
+        "results": res
+      }
+    } else {
+      throw new Error("Missing required arguments")
+    }
+  } catch (err) {
+    return {
+      type: "err",
+      error: err
+    }
+  }
+});
+
+
+/** Closes the connection to the currently opened database, if there is one */
 ipcMain.handle("close-db-connection", async (event, ...args) => {
   try {
     if (!db) {
@@ -293,15 +332,20 @@ ipcMain.handle('update-table', async (event, ...args) => {
 
     let creationStmt = args[0];
     let newName = args[1];
+    let newColNames = args[2];
+
+    if (!creationStmt || !newName || !newColNames) {
+      throw new Error("Missing required arguments");
+    }
 
     let ogColumns = (await db.all("SELECT name FROM pragma_table_info('" + editingTable + "')")).map((col) =>  `"${col.name}"`);
 
-    console.log(ogColumns);
+    // console.log(ogColumns);
     let query = "PRAGMA foreign_keys=off;\nBEGIN TRANSACTION;";
     let tmpname = `"${Date.now()}"`;
 
     query += `\nCREATE TABLE ${tmpname} (\n${creationStmt}\n);`;
-    query += `\nINSERT INTO ${tmpname} (${ogColumns.toString()}) SELECT * FROM '${editingTable}';`
+    query += `\nINSERT INTO ${tmpname} (${newColNames}) SELECT * FROM '${editingTable}';`
     query += `\nDROP TABLE "${editingTable}";`
     query += `\nALTER TABLE ${tmpname} RENAME TO "${newName}";`
 
