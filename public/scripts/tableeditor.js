@@ -51,6 +51,10 @@
         saveNewChanges();
       }
     });
+
+    window.addEventListener("resize", () => {
+      responsiveDataViewColumns(qs("table"))
+    });
   }
 
   async function getConstraints() {
@@ -198,7 +202,7 @@
       id("table-name").value = meta.name;
 
       buildColumnOptions(columnInfo, constraints["results"]);
-
+      responsiveDataViewColumns(qs("table"));
     } catch (err) {
       handleError(err);
     }
@@ -290,6 +294,25 @@
     defaultInput.addEventListener("input", () => {
       hasChanges = true
     })
+
+    let fk = checkBox("fk", pk, ai);
+    let fkInput = document.createElement("select");
+    fkInput.id = `row-${qsa("#row-builder tr").length}-fk-value`;
+    fkInput.value = `fk-${qsa("#row-builder tr").length}-value`;
+    fkInput.classList.add(`fk-value`);
+    fkInput.classList.add("hidden")
+
+    // populate with columns from all other tables
+    populateWithOtherColumns(fkInput);
+
+    fk.querySelector("input").addEventListener("click", () => {
+      if (fk.querySelector("input").checked) {
+        id("fk-header").classList.remove("hidden");
+      } else if (qsa(".fk:checked").length === 0) {
+        id("fk-header").classList.add("hidden");
+      }
+      fkInput.classList.toggle("hidden");
+    });
     
     row.append(
       closeButton(),
@@ -298,8 +321,9 @@
       checkBox("nn", pk, ai, constraints?.nn),
       checkBox("ai", pk, ai),
       checkBox("u", pk, ai, constraints?.u),
-      checkBox("fk", pk, ai, ),
-      defaultHolder
+      fk,
+      defaultHolder,
+      fkInput
     );
 
     if (pk) {
@@ -320,6 +344,31 @@
     }
     
     qs("#row-builder tbody").appendChild(row)
+  }
+
+  async function populateWithOtherColumns(input) {
+    try {
+      let res = await ipc.invoke("get-other-columns");
+      if (res.type === "err") {
+        throw new Error(res.error);
+      }
+
+      let groups = Object.keys(res.results);
+      groups.forEach((group) => {
+        let optgroup = document.createElement("optgroup");
+        optgroup.label = group;
+        res.results[group].forEach((val) => {
+          let opt = document.createElement("option");
+          opt.value = `${group}.${val}`;
+          opt.textContent = val;
+
+          optgroup.appendChild(opt);
+        });
+        input.appendChild(optgroup);
+      });
+    } catch (err) {
+      handleError(err);
+    }
   }
 
   /**
@@ -436,6 +485,18 @@
     } else {
       throw new Error(res.err);
     }
+  }
+
+  function responsiveDataViewColumns(table) {
+    let tableWidth = table.parentNode?.offsetWidth - 210;
+    let numColumns = table.querySelectorAll("th").length - 1;
+
+    let content = table.querySelectorAll("p, input:not([type='checkbox'])");
+
+    [...content].forEach((elem) => {
+      elem.style.maxWidth = `${tableWidth / numColumns}px`;
+      elem.style.minWidth = `${tableWidth / numColumns}px`;
+    });
   }
 
   /** HELPER FUNCTIONS THAT I PROBABLY SHOULD HAVE IMPORTED.  YOLO */

@@ -58,6 +58,22 @@ main {
   z-index: 10;
 }
 
+table p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+table p:focus {
+  overflow: visible;
+  max-width: 300px !important;
+  background-color: var(--bg-darker);
+  z-index: 10;
+  position: relative;
+  display: inline-block;
+  white-space: normal;
+}
+
 #row-builder-holder {
   overflow-y: scroll;
   border-radius: 10px;

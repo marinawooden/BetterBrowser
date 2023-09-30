@@ -91,6 +91,34 @@ async function processCSVFile(delimiter = ",", firstRowIsColumns) {
   return records;
 }
 
+ipcMain.handle("get-other-columns", async (event, ...args) => {
+  try {
+    if (!db || !editingTable) {
+      throw new Error("No database or currently open table was given");
+    }
+
+    let ans = {};
+    let tblnames = (await db.all(`SELECT tbl_name FROM sqlite_master WHERE tbl_name NOT LIKE "sqlite_sequence"`)).map((tbl) => tbl.tbl_name);
+
+    for (const tbl of tblnames) {
+      let colnames = (await db.all(`PRAGMA table_info("${tbl}")`)).map((col) => col.name);
+      ans[tbl] = colnames
+    }
+
+    return {
+      "type": "success",
+      "results": ans
+    }
+  } catch (err) {
+    console.error(err);
+    return {
+      "type": "err",
+      "error": err
+    }
+  }
+});
+
+/** Finds the primary keys of all rows given some constraints */
 ipcMain.handle("select-all-rows", async (event, ...args) => {
   try {
     let table = args[0];
@@ -741,6 +769,7 @@ ipcMain.handle('get-table-meta', async (event, ...args) => {
       throw new Error("No database currently open!");
     }
   } catch (err) {
+    console.error(err);
     return {
       "type": "err",
       "error": err

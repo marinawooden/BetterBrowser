@@ -59,7 +59,9 @@
 
     getRecentConnections();
 
-    window.addEventListener("resize", responsiveDataViewColumns);
+    window.addEventListener("resize", () => {
+      responsiveDataViewColumns(qs("#table-view table"))
+    });
   }
 
   async function selectAllVisibleRows(elem) {
@@ -198,7 +200,7 @@
       qs("#table-view table").appendChild(row);
     });
 
-    responsiveDataViewColumns();
+    responsiveDataViewColumns(qs("#table-view table"));
 
     if (results.length % 10 !== 0 || results.length === 0) {
       id("page-next").classList.add("invisible");
@@ -223,14 +225,20 @@
     }, {});
   }
 
-  function responsiveDataViewColumns() {
+  function responsiveDataViewColumns(table) {
     // the max width
-    let tableWidth = qs("#viewer")?.offsetWidth - 210;
-    let numColumns = qsa("#table-view th").length - 1;
+    // qs("#viewer")
+    // qsa("#table-view th")
 
-    qsa("#table-view td p, #table-view th p").forEach((elem) => {
+    let tableWidth = table.parentNode?.offsetWidth - 210;
+    let numColumns = table.querySelectorAll("th").length - 1;
+
+    let content = table.querySelectorAll("p");
+
+    [...content].forEach((elem) => {
       elem.style.maxWidth = `${tableWidth / numColumns}px`;
-      elem.style.minWidth = `${tableWidth / numColumns}px`;    });
+      elem.style.minWidth = `${tableWidth / numColumns}px`;
+    });
   }
 
   async function confirmDeleteTable(table) {
@@ -485,7 +493,7 @@
       id("page-back").classList.add("invisible");
     }
 
-    responsiveDataViewColumns();
+    responsiveDataViewColumns(qs("#table-view table"));
   }
 
   function nextPage() {
@@ -500,7 +508,7 @@
       id("page-back").classList.remove("invisible");
     }
 
-    responsiveDataViewColumns();
+    responsiveDataViewColumns(qs("#table-view table"));
   }
 
   async function executeSql() {
@@ -927,7 +935,7 @@
         });
         
         id("table-view").appendChild(dataViewTable);
-        // responsiveDataViewColumns();
+        // responsiveDataViewColumns(qs("#table-view table"));
 
         if (tableData.data.length % 10 !== 0) {
           id("page-next").classList.add("invisible");
@@ -945,7 +953,7 @@
         id("table-view").append(dataViewTable, footer);
       }
 
-      responsiveDataViewColumns();
+      responsiveDataViewColumns(qs("#table-view table"));
 
     } catch (err) {
       alert(err);
