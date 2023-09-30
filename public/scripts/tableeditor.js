@@ -87,7 +87,8 @@
         changesPopup(false);
       } else {
         let newColNames = [...qsa(".col-name")].map((col) => `'${col.textContent}'`);
-        let qry = await ipc.invoke("update-table", creationStmt(), id("table-name").value, newColNames);
+        let defaults = [...qsa(".def")].map((def) => def.value);
+        let qry = await ipc.invoke("update-table", creationStmt(), id("table-name").value, newColNames, defaults);
         if (qry.type === "err") {
           throw new Error(qry.err);
         }
@@ -118,7 +119,7 @@
       let query = `
         ${[...columnMeta].map((col) => {
           return `\n"${col[0]}" ${col[1]}`
-        })},\nPRIMARY KEY ("${id('pk').value}"${qs("tr[data-name='" + id('pk').value + "'] .ai").checked ? " AUTOINCREMENT" : ""})
+        })},\nPRIMARY KEY ("${id('pk').value}"${qs("tr[data-name='" + id('pk').value + "'] .ai")?.checked ? " AUTOINCREMENT" : ""})
       `.trim();
 
       return query;
@@ -285,6 +286,10 @@
     defaultInput.type = "text";
     defaultHolder.appendChild(defaultInput);
     defaultInput.value = constraints?.default || "";
+
+    defaultInput.addEventListener("input", () => {
+      hasChanges = true
+    })
     
     row.append(
       closeButton(),
@@ -308,12 +313,27 @@
       // add a class if the row refers to a column that actually exists
       // in the database
       name.addEventListener("input", function () {
+        updateSelectionName(this);
         this.closest("tr").classList.add("new-name");
         hasChanges = true;
       });
     }
     
     qs("#row-builder tbody").appendChild(row)
+  }
+
+  /**
+   * A node 
+   * @param {HTMLElement} elem - the editing node
+   */
+  function updateSelectionName(elem) {
+    let newName = elem.textContent;
+    let toChangeIndex = [...elem.parentNode.children].indexOf(elem);
+
+    id("pk").children[toChangeIndex].textContent = newName;
+    id("pk").children[toChangeIndex].value = newName;
+    
+    elem.closest("tr").dataset.name = newName;
   }
 
   /**

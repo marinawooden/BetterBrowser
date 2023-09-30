@@ -2,7 +2,10 @@
 (function() {
   const ipc = require('electron').ipcRenderer;
   
+  let selectedRows = [];
+  let editingRows = {};
   let pageViewing = 0;
+  let newRows = [];
 
   window.addEventListener("load", init);
 
@@ -11,7 +14,13 @@
     id("data-options-toggler").addEventListener("click", () => id("data-options").classList.toggle("collapsed"));
     id("add-database-button").addEventListener("click", addDatabase);
     id("clear-connections").addEventListener("click", promptForClear);
-    id("table-name").addEventListener("change", async (e) => await openTableView(e.currentTarget.value));
+    id("table-name").addEventListener("change", async (e) => {
+      pageViewing = 0;
+      selectedRows = [];
+      await openTableView(e.currentTarget.value);
+      id("select-all").textContent = "Select All Rows";
+      id("select-all").classList.remove("selected");
+    });
     id("open-database-button").addEventListener("click", () => openDatabase());
     id("page-next").addEventListener("click", nextPage);
     id("page-back").addEventListener("click", prevPage);
@@ -19,13 +28,26 @@
     id("sql-input").addEventListener("keyup", getTextAreaHeight);
     id("delete-selected").addEventListener("click", removeRows);
     id("add-new-row").addEventListener("click", addNewRow);
+    id("select-all").addEventListener("click", function() {
+      if (!this.classList.contains("selected")) {
+        selectAllVisibleRows(this);
+      } else {
+        selectedRows = [];
+        qsa("#table-view input[type='checkbox']:checked").forEach((input) => input.checked = false);
+        this.textContent = "Select All Rows";
+        this.classList.remove("selected");
+        id("data-options").classList.add("collapsed")
+      }
+    });
     id("save-changes").addEventListener("click", async () => {
       await saveNewChanges();
       id("data-options").classList.add("collapsed");
     });
 
     id("search-table").addEventListener("input", () => {
-      testQuery()
+      pageViewing = 0;
+      id("page-back").classList.add("invisible");
+      searchForQuery()
     });
 
     window.addEventListener('keydown', async (e) => {
@@ -40,7 +62,85 @@
     window.addEventListener("resize", responsiveDataViewColumns);
   }
 
-  async function testQuery(page = 0) {
+  async function selectAllVisibleRows(elem) {
+    try {
+      let tablename = id("table-name").value;
+      let colnames = [...qsa("#table-view th")].map((col) => col.textContent);
+      let searchterm = id("search-table").value.trim();
+
+      colnames.shift();
+
+      let res = await ipc.invoke("select-all-rows", tablename, colnames, searchterm);
+      if (res.type === "err") {
+        throw new Error(res.error);
+      }
+
+      let pk = id("pk").textContent;
+      let formattedMatches = res.matches.map((row) => row[pk] + "");
+
+      selectedRows = formattedMatches;
+
+      // everything on current page visible
+      qsa("#table-view input[type='checkbox']").forEach((checkbox) => {
+        checkbox.checked = true;
+      });
+
+      id("data-options").classList.add("collapsed");
+      elem.textContent = "Deselect All Rows"
+      elem.classList.add("selected");
+    } catch (err) {
+      handleError(err);
+    }
+  }
+
+  function recordCheck() {
+    let val = this.closest("tr").id;
+    if (this.checked) {
+      selectedRows.push(val);
+      console.log(selectedRows);
+
+    } else {
+      let i = selectedRows.indexOf(val);
+      selectedRows.splice(i, 1);
+    }
+  }
+
+  async function removePreviousConnection(e) {
+    try {
+      let toRemove = e.currentTarget.parentNode;
+      let toRemoveName = toRemove.querySelector("p:last-of-type").textContent;
+      
+      let res = await ipc.invoke("remove-connection", toRemoveName);
+      if (res.type === "err") {
+        throw new Error(res.error);
+      }
+
+      toRemove.remove();
+
+      if (qs("#database-structure p").textContent === toRemoveName) {
+        id("database-structure").remove();
+        let noDatabaseOpenText = document.createElement("p");
+        noDatabaseOpenText.textContent = "No database is currently open, please create one or open one from a file";
+
+        id("table-schema-view").appendChild(noDatabaseOpenText);
+        id("table-name").innerHTML = "";
+        qs("#table-view table").remove();
+      }
+
+      if (!qs("#recent-connections *")) {
+        let noRecentConnection = document.createElement("p");
+        noRecentConnection.textContent = "Databases you connect to will be shown here (once you actually connect to them)";
+
+        id("recent-connections").appendChild(noRecentConnection)
+      }
+      // await populateDbView();
+      // await populateDataViewerOptions();
+    } catch (err) {
+      handleError(err);
+    }
+  }
+
+  async function searchForQuery(page = 0) {
     try {
       let colnames = [...qsa("#table-view th:not(:first-of-type)")].map((elem) => elem.textContent);
       let tablename = id("table-name").value;
@@ -58,7 +158,6 @@
   }
 
   function showSearchResults(results) {
-    console.log(results);
     qsa("#table-view table tr:not(:first-of-type)").forEach((row) => row.remove());
 
     results.forEach((result) => {
@@ -70,6 +169,11 @@
       checkbox.type = "checkbox";
       checkboxCol.appendChild(checkbox);
 
+      if (selectedRows.includes(result[pk] + "")) {
+        checkbox.checked = true;
+      }
+
+      checkbox.addEventListener("click", recordCheck)
       row.append(checkboxCol);
       
       [...Object.keys(result)].forEach((col) => {
@@ -78,27 +182,55 @@
 
         contentHolder.contentEditable = true;
         contentHolder.textContent = result[col];
+        contentHolder.addEventListener("input", function() {
+          this.closest("tr").classList.add("modified");
+          qs("a[href='#viewer']").classList.add("unsaved");
+
+          editingRows[id("table-name").value] = editingRows[id("table-name").value] || {};
+          editingRows[id("table-name").value][this.closest("tr")["id"]] = getRowContents(this.closest("tr"));
+        });
 
         content.appendChild(contentHolder);
         row.appendChild(content);
       });
 
-
       row.id = result[pk];
       qs("#table-view table").appendChild(row);
     });
 
-    responsiveDataViewColumns()
+    responsiveDataViewColumns();
+
+    if (results.length % 10 !== 0 || results.length === 0) {
+      id("page-next").classList.add("invisible");
+
+      if (pageViewing === 0) {
+        id("page-back").classList.add("invisible");
+      }
+    } else {
+      id("page-next").classList.remove("invisible");
+    }
+  }
+
+  function getRowContents(row) {
+    let keys = [...qsa("#table-view th")].map((col) => col.textContent);
+    let values = [...row.querySelectorAll("td")].map((row) => row.textContent);
+    values.shift();
+    keys.shift();
+
+    return keys.reduce((result, key, index) => {
+      result[key] = values[index];
+      return result;
+    }, {});
   }
 
   function responsiveDataViewColumns() {
     // the max width
-    let tableWidth = qs("#table-view")?.offsetWidth - 25;
-    let numColumns = qsa("#table-view th").length;
+    let tableWidth = qs("#viewer")?.offsetWidth - 210;
+    let numColumns = qsa("#table-view th").length - 1;
 
     qsa("#table-view td p, #table-view th p").forEach((elem) => {
       elem.style.maxWidth = `${tableWidth / numColumns}px`;
-    });
+      elem.style.minWidth = `${tableWidth / numColumns}px`;    });
   }
 
   async function confirmDeleteTable(table) {
@@ -185,6 +317,9 @@
           col.addEventListener("input", function() {
             this.closest("tr").classList.add("modified");
             qs("a[href='#viewer']").classList.add("unsaved");
+
+            editingRows[id("table-name").value] = editingRows[id("table-name").value] || {};
+            editingRows[id("table-name").value][this.closest("tr")["id"]] = getRowContents(this.closest("tr"));
           });
         })
       });
@@ -217,20 +352,29 @@
       let table = qs("#table-view table");
       let newRow = document.createElement("tr");
 
+      // PROBLEMATIC since pk might not be an integer
       newRow.id = info.lastID + 1;
-      newRow.classList.add("new-row")
+      newRow.classList.add("new-row");
 
       let firstCol = document.createElement("td");
       let checkBox = document.createElement("input");
       checkBox.type = "checkbox";
+      if (selectedRows.includes(newRow.id + "")) {
+        checkBox.checked = true;
+      }
+
+      checkBox.addEventListener("click", recordCheck)
 
       firstCol.appendChild(checkBox);
       newRow.prepend(firstCol);
 
-      
+      console.log(info);
       for (let i = 0; i < info.columns?.length; i++) {
         let col = info.columns[i];
-        let newCol = document.createElement("td");
+        let colHolder = document.createElement("td");
+        let newCol = document.createElement("p");
+        let def = info.defaults[col];
+        newCol.textContent = def || "";
 
         if (col == info.pk && info.isAutoincrement) {
           // find the last id so it's not static
@@ -243,7 +387,19 @@
         }
 
         newCol.contentEditable = true;
-        newRow.appendChild(newCol);
+
+        newCol.addEventListener("click", function() {
+          let colHeader = this.closest("table").querySelector("tr").children[i + 1].querySelector("p");
+          colHeader.classList.add("w-100");
+        });
+
+        newCol.addEventListener("blur", function() {
+          let colHeader = this.closest("table").querySelector("tr").children[i + 1].querySelector("p");
+          colHeader.classList.remove("w-100");
+        });
+
+        colHolder.appendChild(newCol);
+        newRow.appendChild(colHolder);
       }
 
       table.insertBefore(newRow, table.querySelector("tr").nextSibling);
@@ -258,7 +414,7 @@
 
   async function retrieveNewRowInfo() {
     let activeTable = id("table-name").value;
-    let meta = ipc.invoke("new-row-meta", activeTable);
+    let meta = await ipc.invoke("new-row-meta", activeTable);
 
     if (meta.type === "err") {
       throw new Error(meta.err);
@@ -315,27 +471,36 @@
 
   function prevPage() {
     pageViewing -= 1;
+    if (id("page-next").classList.contains("invisible")) {
+      id("page-next").classList.remove("invisible");
+    }
+
+    if (id("search-table").value.trim().length > 0) {
+      searchForQuery(pageViewing)
+    } else {
+      openTableView(id("table-name").value);
+    }
+
     if (pageViewing === 0) {
       id("page-back").classList.add("invisible");
     }
 
-    if (id("page-next").classList.contains("invisible")) {
-      id("page-next").classList.remove("invisible");
-    }
-    openTableView(id("table-name").value);
+    responsiveDataViewColumns();
   }
 
   function nextPage() {
     pageViewing += 1;
+    if (id("search-table").value.trim().length > 0) {
+      searchForQuery(pageViewing)
+    } else {
+      openTableView(id("table-name").value);
+    }
+
     if (id("page-back").classList.contains("invisible")) {
       id("page-back").classList.remove("invisible");
     }
 
-    if (id("search-table").value.trim().length > 0) {
-      testQuery(pageViewing)
-    } else {
-      openTableView(id("table-name").value);
-    }
+    responsiveDataViewColumns();
   }
 
   async function executeSql() {
@@ -574,7 +739,6 @@
   async function getTables() {
     try {
       let tables = await ipc.invoke('retrieve-tables');
-      
       return {
         "db": tables["db"],
         "tables": tables["tables"].filter((table) => table.tbl !== "sqlite_sequence")
@@ -669,8 +833,11 @@
           id("table-name").appendChild(tableOption);
         });
 
-        // populate table view as first 
+        // populate table view as first table
         await openTableView(tables[0]);
+
+        id("select-all").textContent = "Select All Rows";
+        id("select-all").classList.remove("selected");
       }
     } catch (err) {
       alert(err);
@@ -679,6 +846,10 @@
 
   async function openTableView(table) {
     try {
+      // id("page-next").classList.add("invisible");
+      // id("page-back").classList.add("invisible");
+      id("search-table").value = "";
+
       let tableData = await getDataFromTable(table);
       let tableMeta = await ipc.invoke("get-table-meta", table);
 
@@ -711,12 +882,16 @@
           let firstCol = document.createElement("td");
           let checkBox = document.createElement("input");
           checkBox.type = "checkbox";
+          if (selectedRows.includes(rowData[tableMeta.pk] + "")) {
+            checkBox.checked = true;
+          }
+          checkBox.addEventListener("click", recordCheck)
   
           firstCol.appendChild(checkBox);
           row.appendChild(firstCol);
           row.id = rowData[tableMeta.pk];
   
-          [...Object.keys(rowData)].forEach((col) => {
+          [...Object.keys(rowData)].forEach((col, i) => {
             let tableWidth = qs("main > section")?.offsetWidth - 25;
             let numColumns = Object.keys(rowData).length;
             let cell = document.createElement("td");
@@ -730,6 +905,19 @@
             cellcontainer.addEventListener("input", function() {
               this.closest("tr").classList.add("modified");
               qs("a[href='#viewer']").classList.add("unsaved");
+
+              editingRows[id("table-name").value] = editingRows[id("table-name").value] || {};
+              editingRows[id("table-name").value][this.closest("tr")["id"]] = getRowContents(this.closest("tr"));
+            });
+
+            cellcontainer.addEventListener("click", function() {
+              let colHeader = this.closest("table").querySelector("tr").children[i + 1].querySelector("p");
+              colHeader.classList.add("w-100");
+            });
+    
+            cellcontainer.addEventListener("blur", function() {
+              let colHeader = this.closest("table").querySelector("tr").children[i + 1].querySelector("p");
+              colHeader.classList.remove("w-100");
             });
 
             cell.appendChild(cellcontainer);
@@ -739,6 +927,7 @@
         });
         
         id("table-view").appendChild(dataViewTable);
+        // responsiveDataViewColumns();
 
         if (tableData.data.length % 10 !== 0) {
           id("page-next").classList.add("invisible");
@@ -755,6 +944,8 @@
         footer.appendChild(footerText);
         id("table-view").append(dataViewTable, footer);
       }
+
+      responsiveDataViewColumns();
 
     } catch (err) {
       alert(err);
@@ -790,6 +981,14 @@
     let meta = document.createElement("div");
     let title = document.createElement("p");
     let loc = document.createElement("p");
+    let closeIcon = document.createElement("img");
+    closeIcon.src = "./images/close-thin.svg";
+    closeIcon.classList.add("remove-connection");
+
+    closeIcon.addEventListener("click", (e) => {
+      e.stopPropagation();
+      removePreviousConnection(e);
+    });
 
     let filename = conn.split('/');
     filename = filename[filename.length - 1];
@@ -800,7 +999,7 @@
     icon.alt = "four-pointed star";
 
     meta.append(title, loc);
-    connectionFrame.append(icon, meta);
+    connectionFrame.append(icon, meta, closeIcon);
 
     return connectionFrame;
   }

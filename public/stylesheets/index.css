@@ -12,6 +12,7 @@ font-family: 'Schibsted Grotesk', sans-serif;
 html {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
+  overflow-x: hidden;
 }
 
 body {
@@ -70,8 +71,12 @@ button:hover {
   background-image: linear-gradient(#00fffb, #0069ff);
 }
 
-#add-new-row {
+#select-all {
   color: lightgreen;
+}
+
+#add-new-row {
+  color: #76ddff;
 }
 
 #save-changes {
@@ -167,7 +172,7 @@ th:first-of-type {
 #data-options {
   position: absolute;
   right: 1em;
-  margin-top: 6.5em;
+  margin-top: 10.5em;
   text-align: right;
   /* transform: ; */
   transition: 0.5s transform, 0.5s opacity;
@@ -180,7 +185,6 @@ th:first-of-type {
   height: 0 !important;
   animation: 0.1s hide-totally forwards !important;
   animation-delay: 0.5s !important;
-  margin: 0 !important;
 }
 
 #database-structure > li > div {
@@ -440,6 +444,17 @@ select {
   color: var(--text-highlight);
 }
 
+#table-view p:focus {
+  min-width: auto;
+  overflow: visible;
+  max-width: 300px !important;
+  background-color: var(--bg-darker);
+  z-index: 10;
+  position: relative;
+  display: inline-block;
+  white-space: normal;
+}
+
 .options-icon {
   width: 10px;
 }
@@ -507,6 +522,7 @@ th {
 table p {
   margin: 0;
   display: inline-block;
+  width: 100%;
 }
 
 table p,
@@ -610,6 +626,10 @@ nav,
   height: 50px;
 }
 
+.remove-connection {
+  margin: 0 0 0 auto;
+}
+
 #recent-connections > div,
 #database-structure {
   background-color: var(--bg-darker);
@@ -622,6 +642,26 @@ nav,
   display: flex;
   align-items: center;
   cursor: pointer;
+}
+
+#recent-connections > div > img:last-of-type {
+  opacity: 0;
+  transition: 0.2s all;
+}
+
+#recent-connections > div:hover > img:last-of-type {
+  opacity: 1;
+}
+
+#recent-connections > div > div {
+  flex: 1;
+  overflow: hidden;
+}
+
+#recent-connections > div p {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 #recent-connections > div p:nth-of-type(1) {
@@ -754,6 +794,10 @@ dialog[open] {
 
 #add-table-options p:nth-of-type(2) {
   color: #ffa500a8
+}
+
+.w-100 {
+  max-width: 100% !important;
 }
 
 

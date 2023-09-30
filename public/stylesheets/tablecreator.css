@@ -51,6 +51,18 @@ main {
   margin-bottom: 0;
 }
 
+#row-builder th {
+  position: sticky;
+  top: 0px;
+  background-color: var(--bg-lighter);
+  z-index: 10;
+}
+
+#row-builder-holder {
+  overflow-y: scroll;
+  border-radius: 10px;
+}
+
 #rows p {
   margin: 0;
 }
@@ -123,6 +135,10 @@ tr:nth-of-type(2n - 1) {
 
 tr:nth-of-type(1) {
   color: var(--text-lighter);
+  background-color: var(--bg-lighter);
+}
+
+tr:nth-of-type(1) th {
   background-color: var(--bg-lighter);
 }
 

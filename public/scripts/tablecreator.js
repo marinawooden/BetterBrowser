@@ -12,7 +12,14 @@ const ipc = require('electron').ipcRenderer;
     id("pk").addEventListener("change", changePrimaryKey);
     id("add-row").addEventListener("click", () => addRow());
 
-    addRow("id")
+    addRow("id");
+
+    window.addEventListener('keydown', async (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        // alert("THE")
+        makeNewTable(e);
+      }
+    });
   }
 
   function addRow(name) {
@@ -202,25 +209,24 @@ const ipc = require('electron').ipcRenderer;
   }
 
   function updateRowName(e) {
-    let newRowName = e.currentTarget.textContent || "_";
-    if (newRowName !== e.currentTarget.textContent) {
-      e.currentTarget.textContent = newRowName
-    }
-
+    let newRowName = e.currentTarget.textContent;
     let prevValue = e.currentTarget.closest('tr').dataset.name;
-    let pkOption = qs(`option[value='${prevValue}']`);
+    let pkOption = qs(`option[value='${prevValue}']`);// getChildIndex
 
     pkOption.textContent = newRowName;
     pkOption.value = newRowName;
+    id("primary-key-name").textContent = id("pk").value;
 
     e.currentTarget.closest('tr').dataset.name = newRowName;
- 
-    qs(`.${prevValue} .col-name`).textContent = `"${newRowName}" `;
-    qs(`.${prevValue}`).classList.replace(prevValue, newRowName);
-    
-    if (id("primary-key-name").textContent === prevValue) {
-      id("primary-key-name").textContent = newRowName;
+
+    let queryComponent = qs("#rows").children[[...pkOption.parentNode.children].indexOf(pkOption)];
+    queryComponent.querySelector(".col-name").textContent = `"${newRowName}" `;
+    if (prevValue && newRowName) {
+      queryComponent.classList.replace(prevValue, newRowName);
+    } else {
+      queryComponent.class = "";
     }
+    
   }
 
   function removeRow(e) {

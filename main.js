@@ -91,6 +91,76 @@ async function processCSVFile(delimiter = ",", firstRowIsColumns) {
   return records;
 }
 
+ipcMain.handle("select-all-rows", async (event, ...args) => {
+  try {
+    let table = args[0];
+    let colnames = args[1];
+    let searchterm = args[2];
+
+    if (!table || !colnames) {
+      throw new Error("Missing required arguments");
+    }
+
+    let query = `SELECT * FROM ${table}`;
+    if (searchterm) {
+      query += " WHERE \n";
+
+      colnames.forEach((colname, i) => {
+        query += `\`${colname}\` LIKE "%${searchterm}%"${i === colnames.length - 1 ? "" : " OR\n"}`;
+      });
+    }
+    let results = await db.all(query);
+
+    return {
+      type: "success",
+      matches: results
+    }
+
+  } catch (err) {
+    return {
+      type: "err",
+      error: err
+    }
+  }
+});
+
+/** Removes a connection from the list of recent connections */
+ipcMain.handle("remove-connection", async (event, ...args) => {
+  try {
+    let pathToRemove = args[0];
+
+    if (!pathToRemove) {
+      throw new Error("Missing required arguments");
+    }
+
+    if (pathToRemove === currentDBPath) {
+      await db.close();
+      db = null;
+    }
+
+    const recentconnections = await store.get('recent-db');
+    const index = recentconnections.indexOf(pathToRemove);
+    if (index > -1) { // only splice array when item is found
+      recentconnections.splice(index, 1); // 2nd parameter means remove one item only
+    }
+
+    console.log(recentconnections);
+
+    await store.set('recent-db', recentconnections);
+
+    return {
+      "type": "success"
+    }
+
+  } catch (err) {
+    return {
+      type: "err",
+      error: err
+    }
+  }
+});
+
+/** Searches all rows in a table that match a given query */
 ipcMain.handle("search-table", async (event, ...args) => {
   try {
     if (!db) {
@@ -103,7 +173,7 @@ ipcMain.handle("search-table", async (event, ...args) => {
     let page = args[3] || 0;
 
     if (tablename && columns) {
-      let sqlquery = `SELECT * FROM '${tablename}' WHERE `;
+      let sqlquery = `SELECT * FROM \`${tablename}\` WHERE `;
 
       columns.forEach((colname, i) => {
         sqlquery += `\`${colname}\` LIKE "%${searchquery}%"${i === columns.length - 1 ? "" : " OR\n"}`;
@@ -333,22 +403,29 @@ ipcMain.handle('update-table', async (event, ...args) => {
     let creationStmt = args[0];
     let newName = args[1];
     let newColNames = args[2];
+    let defaults = args[3];
 
-    if (!creationStmt || !newName || !newColNames) {
+    if (!creationStmt || !newName || !newColNames || !defaults) {
       throw new Error("Missing required arguments");
     }
 
-    let ogColumns = (await db.all("SELECT name FROM pragma_table_info('" + editingTable + "')")).map((col) =>  `"${col.name}"`);
+    console.log(defaults)
+
+    let ogColumns = (await db.all(`SELECT name FROM pragma_table_info("${editingTable}")`)).map((col, i) =>  {
+      return defaults[i] ? `COALESCE(\`${col.name}\`, "${defaults[i].replace(/'/g, "''")}")` : `\`${col.name}\``;
+    });
+
 
     // console.log(ogColumns);
     let query = "PRAGMA foreign_keys=off;\nBEGIN TRANSACTION;";
     let tmpname = `"${Date.now()}"`;
 
     query += `\nCREATE TABLE ${tmpname} (\n${creationStmt}\n);`;
-    query += `\nINSERT INTO ${tmpname} (${newColNames}) SELECT * FROM '${editingTable}';`
-    query += `\nDROP TABLE "${editingTable}";`
-    query += `\nALTER TABLE ${tmpname} RENAME TO "${newName}";`
+    query += `\nINSERT INTO ${tmpname} (${newColNames}) SELECT ${ogColumns} FROM \`${editingTable}\`;`;
+    query += `\nDROP TABLE "${editingTable}";`;
+    query += `\nALTER TABLE ${tmpname} RENAME TO \`${newName}\`;`;
 
+    // COALESCE 
     console.log("QUERY");
     console.log(query);
 
@@ -364,7 +441,7 @@ ipcMain.handle('update-table', async (event, ...args) => {
     
   } catch (err) {
     await db.exec("ROLLBACK;\nPRAGMA foreign_keys=on;");
-
+    console.log("ERROR HERE")
     console.log(err);
     return {
       "type": "err",
@@ -386,49 +463,6 @@ function formatColumns(colnames) {
 
   return ans;
 }
-
-ipcMain.handle('update-table-old', async (event, ...args) => {
-  try {
-    if (!editingTable) {
-      throw new Error("No table currently open")
-    }
-
-    let colnames = args[0];
-    // colnames = [[colname, definition]]
-    let newnames = args[1];
-    // newnames = [[oldname, newname]]
-    let newtablename = args[2];
-    
-    
-    let qry = "BEGIN TRANSACTION"
-
-    colnames.forEach((newcol) => {
-      qry += `\nALTER TABLE ${editingTable} ADD '${newcol[0]}' ${newcol[1]};`;
-    });
-
-    newnames.forEach((namechange, i) => {
-      qry += `\nALTER TABLE ${editingTable} RENAME COLUMN ${namechange[0]} TO ${namechange[1]}`
-    });
-
-    if (newtablename) {
-      qry += `\nALTER TABLE ${editingTable} RENAME TO ${newtablename}`;
-    }
-    
-    qry += "\nCOMMIT;";
-
-    console.log(qry)
-
-    // refresh main page
-    return {
-      "type": "success"
-    }
-  } catch (err) {
-    return {
-      "type": "err",
-      "err": err
-    }
-  }
-});
 
 /**
  * Opens the table editor, stores the current table name
@@ -517,7 +551,7 @@ ipcMain.handle('save-changes', async (event, ...args) => {
     if (newValues?.length > 0) {
       for (const arr of newValues) {
         // bleh.  Need to find out how to use placeholders
-        qry += `\nINSERT INTO ${table} (${columns.toString()}) VALUES (${formatColumns(arr)});`;
+        qry += `\nINSERT INTO \`${table}\` (${formatColumns(columns)}) VALUES (${formatColumns(arr)});`;
         // await db.run(qry, arr);
       }
     }
@@ -530,6 +564,8 @@ ipcMain.handle('save-changes', async (event, ...args) => {
         j++;
       }
     }
+
+    console.log(qry);
 
     await db.exec(qry);
     await db.exec("COMMIT;");
@@ -566,8 +602,7 @@ ipcMain.handle('increment-lastid', async (event, ...args) => {
     if (!table) {
       throw new Error("No table found.");
     }
-
-    console.log(newId);
+;
     let test = await db.get("SELECT * FROM sqlite_sequence WHERE name = ?", table);
     if (test) {
       await db.run("UPDATE sqlite_sequence SET seq = ? WHERE name = ?", newId, table);
@@ -604,16 +639,26 @@ ipcMain.handle('new-row-meta', async (event, ...args) => {
     let isAutoincrement = await db.get("SELECT * FROM sqlite_master WHERE type = 'table' AND name = ? AND sql LIKE '%AUTOINCREMENT%'", table);
     let columns = await db.all(`PRAGMA table_info("${table}")`);
     let pk = columns.find((col) => col.pk === 1);
+
+    let sql = await db.get("SELECT sql FROM sqlite_master WHERE name = ?", table);
+    let keys = sql.sql.match(/(?<=^").*(?=".*DEFAULT.*\n)/gm);
+    let values = sql.sql.match(/(?<=DEFAULT ").*(?=")/g);
+    
+    let def = keys.reduce((result, key, index) => {
+      result[key] = values[index];
+      return result;
+    }, {});
+
     let lastid;
 
     if (isAutoincrement) {
       lastid = await db.get("SELECT seq FROM sqlite_sequence WHERE name = ?", table);
     }
     
-    
     return {
       "pk": pk.name,
       "columns": columns.map((col) => col.name),
+      "defaults": def,
       "types": columns.map((col) => col.type),
       "isAutoincrement": !(!isAutoincrement),
       "lastID": lastid ? lastid.seq : 0
@@ -756,8 +801,8 @@ ipcMain.handle('view-data', async (event, ...args) => {
     }
 
     // TODO: SQL INJECTION PART 2
-    let columns = await db.all("SELECT name FROM pragma_table_info('" + table + "')"); 
-    let tableData = await db.all(`SELECT * FROM '${table}' LIMIT ${page * OFFSET}, ${OFFSET}`);
+    let columns = await db.all(`SELECT name FROM pragma_table_info("${table}")`); 
+    let tableData = await db.all(`SELECT * FROM \`${table}\` LIMIT ${page * OFFSET}, ${OFFSET}`);
 
     return {
       "columns": columns,
@@ -781,7 +826,7 @@ ipcMain.handle('retrieve-tables', async () => {
         "tables": await Promise.all(allTables.map(async (tbl) => {
           try {
             // TODO: SQL INJECTION!!!!!!!!! Lovely absolutely lovely
-            let columnNames = await db.all("SELECT * FROM pragma_table_info('" + tbl.name + "')");
+            let columnNames = await db.all(`SELECT * FROM pragma_table_info("${tbl.name}")`);
 
             return {
               "tbl": tbl.name,
@@ -796,7 +841,7 @@ ipcMain.handle('retrieve-tables', async () => {
       return tblData;
     }
   } catch (err) {
-    console.log(err);
+    console.error(err);
     return "Error"
   }
 })
