@@ -293,54 +293,64 @@
 
   async function saveNewChanges() {
     try {
-      
-      let newRows = qsa(".new-row");
-      let modifiedRows = qsa(".modified");
-
-      // take modified rows and update the table
-      let modifiedMatrix = [...modifiedRows].map((row) => {
-        return {
-          pk: row.id,
-          values: [...row.querySelectorAll("td:not(:first-of-type)")].map((cell) => cell.textContent)
-        };
-      })
-
-      // take new row values and update the table
-      let newRowMatrix = [...newRows].map((row) => {
-        return [...row.querySelectorAll("td:not(:first-of-type)")].map((cell) => cell.textContent);
-      });
-
-      let columns = [...qsa("#table-view th:not(:first-of-type)")].map((col) => col.textContent);
-
-      let res = await ipc.invoke("save-changes", id("table-name").value, columns, id("pk").textContent, newRowMatrix, modifiedMatrix);
-      
-      if (res.type === "err") {
-        throw new Error(res.err);
-      }
-
-      newRows.forEach((row) => {
-        row.classList.remove("new-row");
-        // row.addEventListener("")
-        row.querySelectorAll("td").forEach((col) => {
-          col.addEventListener("input", function() {
-            this.closest("tr").classList.add("modified");
-            qs("a[href='#viewer']").classList.add("unsaved");
-
-            editingRows[id("table-name").value] = editingRows[id("table-name").value] || {};
-            editingRows[id("table-name").value][this.closest("tr")["id"]] = getRowContents(this.closest("tr"));
-          });
-        })
-      });
-
-      qsa(".modified").forEach((row) => {
-        row.classList.remove("modified");
-      });
-
-      qs(".unsaved").classList.remove("unsaved");
+      // TODO: get table name from element
+      let viewingTable = qs("table-view").value;
+      let res = await ipc.invoke("dataview-changes", viewingTable);
     } catch (err) {
-      alert(err.message);
+      handleError(err);
     }
   }
+
+  // async function saveNewChanges() {
+  //   try {
+      
+  //     let newRows = qsa(".new-row");
+  //     let modifiedRows = qsa(".modified");
+
+  //     // take modified rows and update the table
+  //     let modifiedMatrix = [...modifiedRows].map((row) => {
+  //       return {
+  //         pk: row.id,
+  //         values: [...row.querySelectorAll("td:not(:first-of-type)")].map((cell) => cell.textContent)
+  //       };
+  //     })
+
+  //     // take new row values and update the table
+  //     let newRowMatrix = [...newRows].map((row) => {
+  //       return [...row.querySelectorAll("td:not(:first-of-type)")].map((cell) => cell.textContent);
+  //     });
+
+  //     let columns = [...qsa("#table-view th:not(:first-of-type)")].map((col) => col.textContent);
+
+  //     let res = await ipc.invoke("save-changes", id("table-name").value, columns, id("pk").textContent, newRowMatrix, modifiedMatrix);
+      
+  //     if (res.type === "err") {
+  //       throw new Error(res.err);
+  //     }
+
+  //     newRows.forEach((row) => {
+  //       row.classList.remove("new-row");
+  //       // row.addEventListener("")
+  //       row.querySelectorAll("td").forEach((col) => {
+  //         col.addEventListener("input", function() {
+  //           this.closest("tr").classList.add("modified");
+  //           qs("a[href='#viewer']").classList.add("unsaved");
+
+  //           editingRows[id("table-name").value] = editingRows[id("table-name").value] || {};
+  //           editingRows[id("table-name").value][this.closest("tr")["id"]] = getRowContents(this.closest("tr"));
+  //         });
+  //       })
+  //     });
+
+  //     qsa(".modified").forEach((row) => {
+  //       row.classList.remove("modified");
+  //     });
+
+  //     qs(".unsaved").classList.remove("unsaved");
+  //   } catch (err) {
+  //     alert(err.message);
+  //   }
+  // }
 
   async function addNewRow() {
     try {

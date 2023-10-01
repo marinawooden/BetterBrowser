@@ -3,6 +3,7 @@ const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path')
 const env = process.env.NODE_ENV || 'development';
 const OFFSET = 10;
+const os = require('os');
 
 const sqlite3 = require('sqlite3');
 const sqlite = require('sqlite');
@@ -91,6 +92,46 @@ async function processCSVFile(delimiter = ",", firstRowIsColumns) {
   return records;
 }
 
+ipcMain.handle("dataview-changes", async (event, ...args) => {
+  try {
+    let changedTable = args[0];
+
+    if (!db || !previewDB || !changedTable) {
+      throw new Error("");
+    }
+
+    let tmp = Date.now();
+    // begin transaction
+    await db.exec(`BEGIN TRANSACTION;`);
+    // drop original table
+    await db.exec(`DELETE FROM ${changedTable};`);
+    // attach staging database
+    await db.exec(`ATTACH DATABASE ${stagingDb.location} AS ${tmp};`);
+    // copy editing table contents into new table
+    await db.exec(`INSERT INTO ${changedTable} SELECT * FROM ${tmp}.${changedTable};`)
+    // detach staging database
+    await db.exec(`DETACH DATABASE ${tmp};`);
+    // commit transaction
+    await db.exec(`COMMIT;`);
+
+    return {
+      "type": "success"
+    }
+  } catch (err) {
+    await db.exec(`ROLLBACK;`);
+    console.error(err);
+
+    return {
+      "type": "err",
+      "error": err
+    }
+  }
+});
+
+/**
+ * Gets information about all other columns, aside from ones in
+ * the given table
+ */
 ipcMain.handle("get-other-columns", async (event, ...args) => {
   try {
     if (!db || !editingTable) {
@@ -912,6 +953,9 @@ ipcMain.handle('open-database', async (event, ...args) => {
       }
       
       db = await getDBConnection(dbPath);
+      await createPreviewDb(dbPath);
+      console.log(previewDB)
+      
 
       if (sqlPath) {
         // populate the db
@@ -955,6 +999,9 @@ ipcMain.handle('add-database', async () => {
 
     if (selectedPath) {
       db = await getDBConnection(selectedPath);
+      await createPreviewDb(selectedPath);
+      console.log(previewDB)
+      
 
       let existing = store.get('recent-db');
 
@@ -1003,6 +1050,31 @@ ipcMain.handle('clear-connections', async () => {
 
 /** Opens the table creator window */
 ipcMain.handle('table-creator', openTableCreator);
+
+/**
+ * Copies a database into the tmp folder
+ * @param {String} dbPath - path of the database to copy
+ * @returns 
+ */
+async function createPreviewDb(dbPath) {
+  const OS_PATH = {
+    "win32": os.tmpdir(),
+    "darwin": "/tmp",
+    "linux": "/tmp"
+  }
+
+  if (!db || !OS_PATH[process.platform]) {
+    throw new Error("nothing to copy");
+  }
+
+  await fsasync.copyFile(dbPath, `${OS_PATH[process.platform]}/tmp.db`);
+  let tmpConn = await getDBConnection(`${OS_PATH[process.platform]}/tmp.db`);
+
+  previewDB = {
+    "location": `${OS_PATH[process.platform]}/tmp.db`,
+    "conn": tmpConn
+  }
+}
 
 // // somewhere in your app.js (after all // endpoint definitions)
 async function getDBConnection(name) {
