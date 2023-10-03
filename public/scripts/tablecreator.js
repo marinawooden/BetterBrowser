@@ -1,6 +1,6 @@
 "use strict";
 const ipc = require('electron').ipcRenderer;
-
+// FOREIGN KEY("identifier") REFERENCES "Games"("identifier")
 (function() {
   const SQLITE_TYPES = ["INTEGER", "REAL", "TEXT", "BLOB"];
 

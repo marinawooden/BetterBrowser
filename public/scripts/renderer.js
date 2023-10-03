@@ -3,9 +3,7 @@
   const ipc = require('electron').ipcRenderer;
   
   let selectedRows = [];
-  let editingRows = {};
   let pageViewing = 0;
-  let newRows = [];
 
   window.addEventListener("load", init);
 
@@ -163,6 +161,7 @@
     qsa("#table-view table tr:not(:first-of-type)").forEach((row) => row.remove());
 
     results.forEach((result) => {
+      // TODO: This is redundant- should be the same as AddNewRow
       let row = document.createElement("tr");
       let pk = id("pk").textContent;
 
@@ -184,13 +183,7 @@
 
         contentHolder.contentEditable = true;
         contentHolder.textContent = result[col];
-        contentHolder.addEventListener("input", function() {
-          this.closest("tr").classList.add("modified");
-          qs("a[href='#viewer']").classList.add("unsaved");
-
-          editingRows[id("table-name").value] = editingRows[id("table-name").value] || {};
-          editingRows[id("table-name").value][this.closest("tr")["id"]] = getRowContents(this.closest("tr"));
-        });
+        contentHolder.addEventListener("input", saveDataViewerInput);
 
         content.appendChild(contentHolder);
         row.appendChild(content);
@@ -230,15 +223,17 @@
     // qs("#viewer")
     // qsa("#table-view th")
 
-    let tableWidth = table.parentNode?.offsetWidth - 210;
-    let numColumns = table.querySelectorAll("th").length - 1;
+    let tableWidth = table?.parentNode?.offsetWidth - 210;
+    let numColumns = table?.querySelectorAll("th").length - 1;
 
-    let content = table.querySelectorAll("p");
+    let content = table?.querySelectorAll("p");
 
-    [...content].forEach((elem) => {
-      elem.style.maxWidth = `${tableWidth / numColumns}px`;
-      elem.style.minWidth = `${tableWidth / numColumns}px`;
-    });
+    if (content) {
+      [...content].forEach((elem) => {
+        elem.style.maxWidth = `${tableWidth / numColumns}px`;
+        elem.style.minWidth = `${tableWidth / numColumns}px`;
+      });
+    }
   }
 
   async function confirmDeleteTable(table) {
@@ -287,70 +282,63 @@
       await populateDbView();
       await populateDataViewerOptions();
     } catch (err) {
+      console.error(err);
       alert(err.message);
     }
+  }
+
+  function getNewColumnValues() {
+    return [...qsa(".new-row")].map((row) => {
+      let cells = [...row.querySelectorAll("td")];
+      cells.shift();  
+    
+      return cells.map((cell) => {
+        return cell.textContent;
+      })
+    });
+  }
+
+  function getColumnNames() {
+    let columns = [...qsa("#table-view table th")];
+    columns.shift();
+
+    return columns.map((col) => {
+      return col.textContent
+    });
   }
 
   async function saveNewChanges() {
     try {
       // TODO: get table name from element
-      let viewingTable = qs("table-view").value;
-      let res = await ipc.invoke("dataview-changes", viewingTable);
+      let viewingTable = id("table-name").value;
+      let columnValues = getNewColumnValues();
+      let res;
+
+      if (columnValues.length > 0) {
+        res = await ipc.invoke("add-new-rows", viewingTable, getNewColumnValues(), getColumnNames());
+        if (res.type === "err") {
+          throw new Error(res.error);
+        }
+
+        [...qsa(".new-row")].forEach((row) => row.classList.remove("new-row"));
+      }
+
+      res = await ipc.invoke("commit-dataview-changes", viewingTable);
+
+      if (res.type === "err") {
+        throw new Error(res.error);
+      }
+
+      qs(".unsaved")?.classList.remove("unsaved");
+
+      // TODO: Reload
+      await populateDbView();
+      // await populateDataViewerOptions();
+
     } catch (err) {
       handleError(err);
     }
   }
-
-  // async function saveNewChanges() {
-  //   try {
-      
-  //     let newRows = qsa(".new-row");
-  //     let modifiedRows = qsa(".modified");
-
-  //     // take modified rows and update the table
-  //     let modifiedMatrix = [...modifiedRows].map((row) => {
-  //       return {
-  //         pk: row.id,
-  //         values: [...row.querySelectorAll("td:not(:first-of-type)")].map((cell) => cell.textContent)
-  //       };
-  //     })
-
-  //     // take new row values and update the table
-  //     let newRowMatrix = [...newRows].map((row) => {
-  //       return [...row.querySelectorAll("td:not(:first-of-type)")].map((cell) => cell.textContent);
-  //     });
-
-  //     let columns = [...qsa("#table-view th:not(:first-of-type)")].map((col) => col.textContent);
-
-  //     let res = await ipc.invoke("save-changes", id("table-name").value, columns, id("pk").textContent, newRowMatrix, modifiedMatrix);
-      
-  //     if (res.type === "err") {
-  //       throw new Error(res.err);
-  //     }
-
-  //     newRows.forEach((row) => {
-  //       row.classList.remove("new-row");
-  //       // row.addEventListener("")
-  //       row.querySelectorAll("td").forEach((col) => {
-  //         col.addEventListener("input", function() {
-  //           this.closest("tr").classList.add("modified");
-  //           qs("a[href='#viewer']").classList.add("unsaved");
-
-  //           editingRows[id("table-name").value] = editingRows[id("table-name").value] || {};
-  //           editingRows[id("table-name").value][this.closest("tr")["id"]] = getRowContents(this.closest("tr"));
-  //         });
-  //       })
-  //     });
-
-  //     qsa(".modified").forEach((row) => {
-  //       row.classList.remove("modified");
-  //     });
-
-  //     qs(".unsaved").classList.remove("unsaved");
-  //   } catch (err) {
-  //     alert(err.message);
-  //   }
-  // }
 
   async function addNewRow() {
     try {
@@ -370,8 +358,6 @@
       let table = qs("#table-view table");
       let newRow = document.createElement("tr");
 
-      // PROBLEMATIC since pk might not be an integer
-      newRow.id = info.lastID + 1;
       newRow.classList.add("new-row");
 
       let firstCol = document.createElement("td");
@@ -391,12 +377,17 @@
         let col = info.columns[i];
         let colHolder = document.createElement("td");
         let newCol = document.createElement("p");
-        let def = info.defaults[col];
+        let def = info.defaults ? info.defaults[col] : "";
         newCol.textContent = def || "";
 
-        if (col == info.pk && info.isAutoincrement) {
+        if (col === info.pk) {
+          newRow.id = info.defaults ? info.defaults[i] : Date.now();
+        }
+
+        if (col === info.pk && info.isAutoincrement) {
           // find the last id so it's not static
           newCol.textContent = info.lastID + 1;
+          newRow.id = info.lastID + 1;
 
           let updateCount = await ipc.invoke("increment-lastid", info.lastID + 1, id("table-name").value);
           if (updateCount.type == "err") {
@@ -426,7 +417,38 @@
         table.removeChild(table.lastChild);
       }
     } catch (err) {
+      console.error(err);
       alert(err);
+    }
+  }
+
+  async function saveDataViewerInput() {
+    try {
+      qs("a[href='#viewer']").classList.add("unsaved");
+      let table = id("table-name").value;
+      let value = this.textContent;
+      let pk = id("pk").textContent;
+      let pkValue = this.closest('tr').id;
+      // let pkValue = this.closest("tr").children[[...id("pk").parentNode.children].indexOf(id("pk"))].textContent;
+      let modifiedColumn = qs("#table-view table tr").children[[...this.closest("tr").children].indexOf(this.parentNode)];
+
+      console.log(modifiedColumn);
+
+      if (this.textContent.trim().length > 0) {
+        let res = await ipc.invoke("add-dataview-changes", table, modifiedColumn.textContent, value, pk, pkValue);
+        if (res.type === "err") {
+          throw new Error(res.error);
+        }
+
+        if (modifiedColumn.id === "pk") {
+          this.closest("tr").id = value;
+        }
+      }
+
+      qs("a[href='#viewer']").classList.add("unsaved");
+    } catch (err) {
+      console.error(err);
+      handleError(err);
     }
   }
 
@@ -465,11 +487,8 @@
         row.closest("tr").remove();
       });
 
-      if (qsa(".new-row, .modified").length === 0 && qs(".unsaved")) {
-        qs(".unsaved").classList.remove("unsaved");
-      }
-
     } catch (err) {
+      console.error(err);
       alert(err.message);
     }
   }
@@ -480,6 +499,8 @@
     if (res.type === "error") {
       throw new Error(res.err)
     }
+
+    qs("a[href='#viewer']").classList.add("unsaved");
   }
 
   function getTextAreaHeight(e) {
@@ -560,6 +581,7 @@
           id("query-details").appendChild(detailsMessage);
         }
       } catch (err) {
+        console.error(err);
         alert(err);
       }
     } else {
@@ -665,10 +687,12 @@
         try {
           await ipc.invoke("open-editor", table.tbl);
           ipc.once("edits-complete", async () => {
-            await populateDbView();
+            // Not sure why but it say's there's no table 'contact' when I rename
             await populateDataViewerOptions();
+            await populateDbView();
           });
         } catch (err) {
+          console.error(err);
           alert(err.message);
         }
       })
@@ -737,6 +761,7 @@
         await populateDataViewerOptions();
       });
     } catch (err) {
+      console.error(err);
       alert(err);
     }
   }
@@ -750,6 +775,7 @@
         await populateDataViewerOptions();
       });
     } catch (err) {
+      console.error(err);
       alert(err);
     }
   }
@@ -762,6 +788,7 @@
         "tables": tables["tables"].filter((table) => table.tbl !== "sqlite_sequence")
       };
     } catch (err) {
+      console.error(err);
       alert(err);
     }
   }
@@ -769,8 +796,13 @@
   async function getDataFromTable(table) {
     try {
       let tableData = await ipc.invoke('view-data', table, pageViewing);
+      if (tableData.type === "err") {
+        throw new Error(tableData.error);
+      }
+
       return tableData;
     } catch (err) {
+      console.error(err);
       alert(err);
     }
   }
@@ -814,6 +846,7 @@
       await getRecentConnections();
       await populateDataViewerOptions();
     } catch (err) {
+      console.error(err);
       alert(err);
     }
   }
@@ -823,6 +856,7 @@
       let res = await ipc.invoke('recent-connections');
       populateRecentConnections(res);
     } catch (err) {
+      console.error(err);
       alert(err);
     }
   }
@@ -839,7 +873,7 @@
         let msg = document.createElement("p");
         msg.textContent = "There's no tables in this database!";
 
-        qs("#table-view > table").classList.add("hidden");
+        qs("#table-view > table")?.classList.add("hidden");
         id("table-view").appendChild(msg);
       } else {
         // Populate table options
@@ -858,6 +892,7 @@
         id("select-all").classList.remove("selected");
       }
     } catch (err) {
+      console.error(err);
       alert(err);
     }
   }
@@ -867,14 +902,21 @@
       // id("page-next").classList.add("invisible");
       // id("page-back").classList.add("invisible");
       id("search-table").value = "";
+      console.log(table);
 
       let tableData = await getDataFromTable(table);
       let tableMeta = await ipc.invoke("get-table-meta", table);
 
+      console.log(tableData);
+      console.log(tableMeta);
+      if (!tableMeta.type === "err") {
+        throw new Error(tableMeta.error);
+      }
+
       let dataViewTable = document.createElement("table");
       let header = document.createElement("tr");
 
-      ["Select", ...tableData.columns.map((col) => col.name)].forEach((column) => {
+      ["Select", ...tableData.columns?.map((col) => col.name)].forEach((column) => {
         let columnName = document.createElement("th");
         let columnHolder = document.createElement("p");
 
@@ -920,13 +962,7 @@
             // cellcontainer.style.maxWidth = `${tableWidth / numColumns}px`;
             cellcontainer.style.maxWidth = `${tableWidth / numColumns}px`;
 
-            cellcontainer.addEventListener("input", function() {
-              this.closest("tr").classList.add("modified");
-              qs("a[href='#viewer']").classList.add("unsaved");
-
-              editingRows[id("table-name").value] = editingRows[id("table-name").value] || {};
-              editingRows[id("table-name").value][this.closest("tr")["id"]] = getRowContents(this.closest("tr"));
-            });
+            cellcontainer.addEventListener("input", saveDataViewerInput);
 
             cellcontainer.addEventListener("click", function() {
               let colHeader = this.closest("table").querySelector("tr").children[i + 1].querySelector("p");
@@ -966,6 +1002,7 @@
       responsiveDataViewColumns(qs("#table-view table"));
 
     } catch (err) {
+      console.error(err);
       alert(err);
     }
   };

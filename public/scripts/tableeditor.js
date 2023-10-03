@@ -80,10 +80,24 @@
 
     newPkRow.classList.add("primary-key");
     newPkRow.querySelector(".ai").disabled = false;
+
+    hasChanges = true;
+  }
+
+  function parseForeignKeys() {
+    return [...qsa(".fk:checked")].map((input) => {
+      let colName = input.closest("tr").dataset.name;
+      let references = input.closest("tr").querySelector(".fk-value").value;
+      let referencesTable = references.split(".")[0];
+      let referencesColumn = references.split(".")[1];
+
+      return `\nFOREIGN KEY("${colName}") REFERENCES "${referencesTable}"("${referencesColumn}")`
+    });
   }
 
   /**
    * Saves new changes to the table
+   * FOREIGN KEY("identifier") REFERENCES "Games"("identifier")
    */
   async function saveNewChanges() {
     try {
@@ -91,13 +105,15 @@
         changesPopup(false);
       } else {
         let newColNames = [...qsa(".col-name")].map((col) => `'${col.textContent}'`);
+
         let defaults = [...qsa(".def")].map((def) => def.value);
+        
         let qry = await ipc.invoke("update-table", creationStmt(), id("table-name").value, newColNames, defaults);
         if (qry.type === "err") {
           throw new Error(qry.err);
         }
 
-        qsa(".new-col").forEach((col) => {
+        [...qsa(".new-col")].forEach((col) => {
           col.dataset.name = col.querySelector(".col-name").textContent;
           col.querySelector(".col-name > p").addEventListener("input", () => {
             col.classList.add("new-name");
@@ -119,12 +135,20 @@
   function creationStmt() {
     try {
       let columnMeta = getNewColumnMeta();
+      let columnNames = [...columnMeta].map((col) => {
+        return `\n"${col[0]}" ${col[1]}`
+      });
+      let primaryKey = `\nPRIMARY KEY ("${id('pk').value}"${qs("tr[data-name='" + id('pk').value + "'] .ai")?.checked ? " AUTOINCREMENT" : ""}`;
+      let foreignKeys = parseForeignKeys()
 
+  //     "rating"	INTEGER NOT NULL DEFAULT 1,
+	// FOREIGN KEY("identifier") REFERENCES "Games",
+	// PRIMARY KEY("identifier" AUTOINCREMENT)
       let query = `
-        ${[...columnMeta].map((col) => {
-          return `\n"${col[0]}" ${col[1]}`
-        })},\nPRIMARY KEY ("${id('pk').value}"${qs("tr[data-name='" + id('pk').value + "'] .ai")?.checked ? " AUTOINCREMENT" : ""})
+        ${columnNames},${foreignKeys.length > 0 ? foreignKeys + "," : ""}${primaryKey})
       `.trim();
+
+      console.log(query);
 
       return query;
     } catch (err) {
@@ -190,6 +214,15 @@
     }, 2000);
   }
 
+  async function getForeignKeys() {
+    let res = await ipc.invoke("get-foreign-keys");
+    if (res.type === "err") {
+      throw new Error(res.error);
+    }
+
+    return res
+  }
+
   /**
    * Fills the editor screen with existing information about the current table
    */
@@ -198,10 +231,13 @@
       let meta = await getTableMeta();
       let columnInfo = await getTableColumns();
       let constraints = await getConstraints();
+      let foreignKeys = await getForeignKeys();
+
+      console.log(foreignKeys)
 
       id("table-name").value = meta.name;
 
-      buildColumnOptions(columnInfo, constraints["results"]);
+      buildColumnOptions(columnInfo, constraints["results"], foreignKeys["results"]);
       responsiveDataViewColumns(qs("table"));
     } catch (err) {
       handleError(err);
@@ -213,11 +249,11 @@
    * @param {Object} columns - stores information about the columns
    * in a table
    */
-  function buildColumnOptions(columns, constraints) {
+  function buildColumnOptions(columns, constraints, foreignKeys) {
     buildPkSelection(columns);
 
     columns.columns.forEach((column, i) => {
-      buildRow(false, constraints[i], columns.types[i], column, columns.pk === column, columns.isAutoincrement);
+      buildRow(false, constraints[i], columns.types[i], column, columns.pk === column, columns.isAutoincrement, foreignKeys[column]);
     })
   }
 
@@ -253,7 +289,7 @@
    * @param {Boolean} pk - whether or not the current column is the primary key
    * @param {Boolean} ai - whether or not the current table autoincrements
    */
-  function buildRow(isNew = true, constraints, colType, column, pk = false, ai = false) {
+  function buildRow(isNew = true, constraints, colType, column, pk = false, ai = false, foreignKey) {
     column = column || `Column ${qsa("#row-builder tr").length}`;
 
     let row = document.createElement("tr");
@@ -296,14 +332,21 @@
     })
 
     let fk = checkBox("fk", pk, ai);
+    let fkInputHolder = document.createElement("td");
     let fkInput = document.createElement("select");
     fkInput.id = `row-${qsa("#row-builder tr").length}-fk-value`;
     fkInput.value = `fk-${qsa("#row-builder tr").length}-value`;
     fkInput.classList.add(`fk-value`);
     fkInput.classList.add("hidden")
 
+    if (foreignKey) {
+      fk.querySelector("input").checked = true;
+      fkInput.classList.remove("hidden");
+      id("fk-header").classList.remove("hidden");
+    }
+
     // populate with columns from all other tables
-    populateWithOtherColumns(fkInput);
+    populateWithOtherColumns(fkInput, foreignKey);
 
     fk.querySelector("input").addEventListener("click", () => {
       if (fk.querySelector("input").checked) {
@@ -313,6 +356,8 @@
       }
       fkInput.classList.toggle("hidden");
     });
+
+    fkInputHolder.appendChild(fkInput);
     
     row.append(
       closeButton(),
@@ -323,7 +368,7 @@
       checkBox("u", pk, ai, constraints?.u),
       fk,
       defaultHolder,
-      fkInput
+      fkInputHolder
     );
 
     if (pk) {
@@ -346,7 +391,7 @@
     qs("#row-builder tbody").appendChild(row)
   }
 
-  async function populateWithOtherColumns(input) {
+  async function populateWithOtherColumns(input, foreignKey) {
     try {
       let res = await ipc.invoke("get-other-columns");
       if (res.type === "err") {
@@ -361,6 +406,10 @@
           let opt = document.createElement("option");
           opt.value = `${group}.${val}`;
           opt.textContent = val;
+
+          if (opt.value === foreignKey) {
+            optgroup.selected = true;
+          }
 
           optgroup.appendChild(opt);
         });
