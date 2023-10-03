@@ -32,6 +32,10 @@
   display: block;
 }
 
+#foreign-keys p {
+  margin: 0;
+}
+
 h1 {
   font-weight: normal;
 }

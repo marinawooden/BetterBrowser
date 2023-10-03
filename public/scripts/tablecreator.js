@@ -30,7 +30,7 @@ const ipc = require('electron').ipcRenderer;
     let newPkOption = document.createElement("option");
     newPkOption.value = newRow.dataset.name;
     newPkOption.textContent = newRow.dataset.name;
-    id("pk").appendChild(newPkOption)
+    id("pk").appendChild(newPkOption);
 
     checkIfHasRows();
   }
@@ -123,7 +123,7 @@ const ipc = require('electron').ipcRenderer;
     })
     uniqTd.appendChild(uniqueCheck);
 
-    let fk = checkBox(`row-${rowNum}-fk`);
+    let fk = checkBox(`row-${rowNum}-fk`, "fk-check");
     fk.addEventListener("change", createFkInput);
     fornTd.appendChild(fk);
 
@@ -150,33 +150,98 @@ const ipc = require('electron').ipcRenderer;
     return row;
   }
 
-  function createFkInput() {
-    // create foreign key input
-    let table = this.closest("table");
-    let rows = table.querySelectorAll("tr");
+  async function getForeignKeys() {
+    try {
+      let res = await ipc.invoke("get-other-columns");
+      if (res.type === "err") {
+        throw new Error(res.error);
+      }
+      return res;
+    } catch (err) {
+      alert(err);
+    }
+  }
 
-    rows.forEach((row, i) => {
-      if (i === 0 && !qs(".fk")) {
-        let rowHead = document.createElement("th");
-        rowHead.textContent = "Foreign Keys";
+  async function createFkInput() {
+    try {
+      if (this.checked) {
+        let table = this.closest("table");
+        let rows = table.querySelectorAll("tr");
 
-        row.appendChild(rowHead);
-      } else if (row.querySelector("input[name='row-" + i + "-fk']:checked")) {
+        for (let i = 0; i < rows.length; i++) {
+          let row = rows[i];
+          if (i === 0 && !id("fk-row")) {
+            let rowHead = document.createElement("th");
+            rowHead.textContent = "Foreign Keys";
+            rowHead.id = "fk-row";
 
-        let rowSelectHolder = document.createElement("td");
-        let rowSelect = document.createElement("select");
-        ["Option 1", "Option 2", "Option 3"].forEach((optn) => {
-          let optnElem = document.createElement("option");
-          optnElem.value = optn;
-          optnElem.textContent = optn;
-          rowSelect.append(optnElem);
-        });
+            row.appendChild(rowHead);
+          } else if (row.querySelector("input[name='row-" + i + "-fk']:checked")) {
 
-        rowSelectHolder.classList.add("fk");
-        rowSelectHolder.appendChild(rowSelect);
-        row.appendChild(rowSelectHolder);
-      }    
-    })
+            let rowSelectHolder = document.createElement("td");
+            let rowSelect = document.createElement("select");
+            let foreignKeys = await getForeignKeys();
+
+            Object.keys(foreignKeys.results).forEach((table) => {
+              let columns = foreignKeys.results[table];
+              let optgroup = document.createElement("optgroup");
+              optgroup.label = table;
+
+              columns.forEach((optn) => {
+                let optnElem = document.createElement("option");
+                optnElem.value = `${table}.${optn}`;
+                optnElem.textContent = optn;
+                optgroup.append(optnElem);
+              })
+              rowSelect.appendChild(optgroup)
+            });
+
+            rowSelectHolder.classList.add("fk");
+            rowSelectHolder.appendChild(rowSelect);
+
+            rowSelect.addEventListener("change", addNewForeignKeyToStatement);
+            row.appendChild(rowSelectHolder);
+          }
+        }
+      } else {
+        this.closest("tr").querySelector(".fk").innerHTML = "";
+        if (qsa(".fk-check:checked").length === 0) {
+          id("row-builder").querySelector("tr").lastChild.remove();
+          this.closest("tr").querySelector(".fk").remove();
+          id(`${this.closest('tr').dataset.name}-fk`).closest("p").remove();
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  /** FOREIGN KEY("identifier") REFERENCES "Games"("identifier") */
+  function addNewForeignKeyToStatement(e) {
+    let fkey = this.value;
+    let referencesTable = fkey.split(".")[0];
+    let referencesColum = fkey.split(".")[1];
+    let colInTable = this.closest("tr").dataset.name;
+    let stmt = document.createElement("p");
+
+    if (id(`${colInTable}-fk`)) {
+      id(`${colInTable}-fk`).parentNode.remove();
+    }
+
+    stmt.textContent = `FOREIGN KEY("`;
+
+    let colTableElem = document.createElement("span");
+    colTableElem.id = `${colInTable}-fk`;
+    colTableElem.textContent = colInTable;
+    stmt.appendChild(colTableElem);
+    console.log(colTableElem);
+
+    console.log(fkey.split("."))
+    stmt.appendChild(document.createTextNode(`") REFERENCES "${referencesTable}"("${referencesColum}")`));
+    console.log(stmt);
+
+    id("foreign-keys").appendChild(stmt);
+    // removal as well
   }
 
   function addRowToQuery(colName) {
@@ -221,6 +286,13 @@ const ipc = require('electron').ipcRenderer;
 
     let queryComponent = qs("#rows").children[[...pkOption.parentNode.children].indexOf(pkOption)];
     queryComponent.querySelector(".col-name").textContent = `"${newRowName}" `;
+
+    // update foreign key value
+    if (id(`${prevValue}-fk`)) {
+      id(`${prevValue}-fk`).textContent = newRowName;
+      id(`${prevValue}-fk`).id = `${newRowName}-fk`;
+    }
+
     if (prevValue && newRowName) {
       queryComponent.classList.replace(prevValue, newRowName);
     } else {
