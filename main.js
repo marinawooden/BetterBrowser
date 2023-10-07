@@ -127,7 +127,7 @@ ipcMain.handle("add-new-rows", async (event, ...args) => {
  */
 ipcMain.handle("add-dataview-changes", async (event, ...args) => {
   try {
-    console.log("ADDING DATAVIEW CHANGES")
+     
     let table = args[0];
     let modifiedColumn = args[1];
     let value = args[2];
@@ -154,6 +154,16 @@ ipcMain.handle("add-dataview-changes", async (event, ...args) => {
   } catch (err) {
     if (err.message === "fk") {
       let violations = await previewDB.conn.all("PRAGMA foreign_key_check");
+      let foreignKeys = await previewDB.conn.all("PRAGMA foreign_key_list('people')");
+
+      violations = violations.map((violation) => {
+        return {
+          ...violation,
+          "from": (foreignKeys.find((tbl) => tbl.table === violation.parent))?.["from"],
+        }
+      });
+
+      //  
       await previewDB.conn.exec(`COMMIT;`);
 
       return {
@@ -169,9 +179,6 @@ ipcMain.handle("add-dataview-changes", async (event, ...args) => {
         "error": err
       }
     }
-    console.log(err);
-    
-    
   }
 });
 
@@ -184,8 +191,9 @@ ipcMain.handle("commit-dataview-changes", async (event, ...args) => {
       throw new Error("Missing necessary input");
     }
 
-    let violations = await previewDB.conn.all("PRAGMA foreign_key_check;");
-    if (violations.length > 0) {
+    let fkviolations = await previewDB.conn.all("PRAGMA foreign_key_check;");
+    //  
+    if (fkviolations.length > 0) {
       throw new Error("Please resolve all foreign key conflicts!");
     }
 
@@ -218,7 +226,7 @@ ipcMain.handle("get-other-columns", async (event, ...args) => {
     let saufCurrent = args[0];
     let ans = {};
     let query = `SELECT tbl_name FROM sqlite_master WHERE tbl_name NOT LIKE "sqlite_sequence"${saufCurrent ? ` AND tbl_name NOT LIKE "${editingTable}"` : ``}`;
-    console.log(query);
+     
     let tblnames = (await db.all(query)).map((tbl) => tbl.tbl_name);
 
     for (const tbl of tblnames) {
@@ -293,7 +301,7 @@ ipcMain.handle("remove-connection", async (event, ...args) => {
       recentconnections.splice(index, 1); // 2nd parameter means remove one item only
     }
 
-    console.log(recentconnections);
+     
 
     await store.set('recent-db', recentconnections);
 
@@ -401,7 +409,7 @@ ipcMain.handle("create-from-csv", async (event, ...args) => {
 
     query += insertStatements.join(";");
 
-    console.log(query);
+     
     await previewDB.conn.exec(query);
     await db.exec(query);
     await previewDB.conn.exec("COMMIT;");
@@ -419,7 +427,7 @@ ipcMain.handle("create-from-csv", async (event, ...args) => {
   } catch (err) {
     await previewDB.conn("ROLLBACK;");
     await db.exec("ROLLBACK;");
-    console.log(err);
+     
     return {
       "type": "err",
       "err": err
@@ -434,7 +442,7 @@ ipcMain.handle("get-csv-data", async (event, ...args) => {
     }
 
     const records = await processCSVFile(args[0], args[1]);
-    console.log(records);
+     
 
     return {
       "type": "success",
@@ -486,13 +494,13 @@ ipcMain.handle("get-foreign-keys", async (event, ...args) => {
         return /^FOREIGN KEY/g.test(sentence)
       })
       .forEach((fk) => {
-        console.log(fk);
+         
         let colInTable = fk.match(/(?<=FOREIGN KEY\(")[^")]*/g)
         let table = fk.match(/(?<=REFERENCES ").*(?="\()/g);
         let foreignCol = fk.match(/(?<=\(")[^"]*(?="\),$)/mg);
 
-        console.log(colInTable);
-        console.log(`${table}.${foreignCol}`)
+         
+         
         foreignKeys[colInTable] = `${table}.${foreignCol}`
       });
 
@@ -607,15 +615,18 @@ ipcMain.handle('update-table', async (event, ...args) => {
       ogColumns.push(defaults[i + ogColumns.length] ? `TEXT("${defaults[i + ogColumns.length]})"` : "NULL")
     }
 
-    // console.log(ogColumns);
-    let query = "BEGIN TRANSACTION;";
+    //  
+    await db.exec("BEGIN TRANSACTION;");
+    await previewDB.conn.exec("BEGIN TRANSACTION;");
     let tmpname = `"${Date.now()}"`;
 
-    query += `\nCREATE TABLE ${tmpname} (\n${creationStmt}\n);`;
+    let query = `\nCREATE TABLE ${tmpname} (\n${creationStmt}\n);`;
     query += `\nINSERT INTO ${tmpname} (${newColNames}) SELECT ${ogColumns} FROM \`${editingTable}\`;`;
     query += `\nDROP TABLE "${editingTable}";`;
     query += `\nALTER TABLE ${tmpname} RENAME TO \`${newName}\`;`;
+    query += `\nCOMMIT;`;
 
+     
     await db.exec(query);
     await previewDB.conn.exec(query);
 
@@ -627,10 +638,11 @@ ipcMain.handle('update-table', async (event, ...args) => {
     }
     
   } catch (err) {
+     
     await db.exec("ROLLBACK;");
     await previewDB.conn.exec("ROLLBACK;");
-    console.log("ERROR HERE")
-    console.log(err);
+    //  
+    //  
     return {
       "type": "err",
       "err": err
@@ -710,7 +722,7 @@ ipcMain.handle('delete-table', async (event, ...args) => {
       "type": "success"
     }
   } catch (err) {
-    console.log(err);
+     
     return {
       "type": "err",
       "err": err
@@ -756,7 +768,7 @@ ipcMain.handle('save-changes', async (event, ...args) => {
       }
     }
 
-    console.log(qry);
+     
 
     await previewDB.conn.exec(qry);
     await previewDB.conn.exec("COMMIT;");
@@ -767,7 +779,7 @@ ipcMain.handle('save-changes', async (event, ...args) => {
       "type": "success"
     }
   } catch (err) {
-    // console.log("ERROR HANDLING REACHED")
+    //  
     await db.exec("ROLLBACK;");
     await previewDB.conn.exec("ROLLBACK;");
 
@@ -932,7 +944,7 @@ ipcMain.handle('remove-rows', async (event, ...args) => {
 ipcMain.handle('get-table-meta', async (event, ...args) => {
   try {
     if (db && previewDB.conn) {
-      console.log(editingTable);
+       
       tblname = args[0] || editingTable;
 
       if (!tblname) {
@@ -1113,7 +1125,7 @@ ipcMain.handle('open-database', async (event, ...args) => {
       
       db = await getDBConnection(dbPath);
       await createPreviewDb(dbPath);
-      console.log(previewDB)
+       
       
 
       if (sqlPath) {
@@ -1125,7 +1137,7 @@ ipcMain.handle('open-database', async (event, ...args) => {
 
       let existing = store.get('recent-db');
 
-      // console.log(existing);
+      //  
       if (!existing) {
         store.set('recent-db', [dbPath]);
       } else if (!existing.includes(dbPath)) {
@@ -1158,14 +1170,14 @@ ipcMain.handle('add-database', async () => {
     let selectedPath = openSaveDialog();
 
     if (!selectedPath["canceled"]) {
-      console.log("HERE*****************************")
-      console.log(selectedPath);
+       
+       
 
       await fsasync.unlink(selectedPath);
 
       db = await getDBConnection(selectedPath);
       await createPreviewDb(selectedPath);
-      console.log(previewDB)
+       
       
 
       let existing = store.get('recent-db');
@@ -1198,17 +1210,20 @@ ipcMain.handle('add-table', async (event, ...args) => {
   if (db) {
     try {
       let query = args[0];
+
+      if (!query) {
+        throw new Error("No query to run");
+      }
+
       await db.run(query);
       await previewDB.conn.run(query);
-
-      console.log(query);
 
       win.webContents.send("table-added");
       tableCreator.close();
 
       return "UPDATED TABLE";
     } catch (err) {
-      console.log(err);
+       
       return err.message;
     }
   } else {
@@ -1257,6 +1272,8 @@ async function getDBConnection(name) {
     driver: sqlite3.Database
   });
 
+  // stop checking constraints
+  // await db.exec("PRAGMA ignore_check_constraints = 1;");
   return db;
 } 
 
@@ -1355,7 +1372,7 @@ const createWindow = async () => {
   });
 
   win.loadFile('public/index.html')
-  win.webContents.setZoomFactor(1.0);
+  // win.webContents.setZoomFactor(1.0);
   // win.webContents.openDevTools()
 }
 
@@ -1384,7 +1401,7 @@ app.whenReady().then(async () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
     })
   } catch (err) {
-    console.log("Something went wrong: " + err.message);
+     
   }
   
 })

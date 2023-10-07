@@ -152,6 +152,15 @@ th:first-of-type {
   padding-top: 1em;
 }
 
+#table-page-toggle > *:hover {
+  color: var(--text-highlight);
+}
+
+#table-page-toggle > * {
+  user-select: none;
+  transition: 1s ease color;
+}
+
 #table-page-toggle {
   display: flex;
   justify-content: space-between;
@@ -174,7 +183,7 @@ th:first-of-type {
   right: 1em;
   margin-top: 10.5em;
   text-align: right;
-  /* transform: ; */
+  z-index: 1;
   transition: 0.5s transform, 0.5s opacity;
   transform-origin: top;
 }
@@ -202,8 +211,10 @@ th:first-of-type {
 
 .invalid-row + div {
   position: absolute;
-  background-color: #fa807291;
-  color: black;
+  background-color: var(--bg-primary);
+  border: 1px solid;
+  color: salmon;
+  z-index: 3;
   white-space: nowrap;
   padding: 0.2em 0.8em;
   border-radius: 0.3em;
@@ -211,6 +222,7 @@ th:first-of-type {
   opacity: 0;
   transition: 0.5s all;
   transform: translateY(6px);
+  pointer-events: none
 }
 
 .invalid-row:hover + div {
@@ -430,6 +442,10 @@ nav a:first-of-type {
   overflow: scroll;
   height: 100px;
   display: block;
+}
+
+textarea:focus, input:focus, p:focus {
+  outline: none;
 }
 
 textarea,
@@ -788,7 +804,7 @@ h1, h2, h3, h4, select, #table-view > div > p {
 dialog {
   flex-direction: column;
   height: calc(100% - 4em);
-  margin: 1em auto;
+  margin: 0;
   max-height: 125px;
   background-color: rgb(35, 40, 40);
   border-radius: 7px;

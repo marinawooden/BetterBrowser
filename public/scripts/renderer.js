@@ -1,6 +1,7 @@
 "use strict";
 (function() {
   const ipc = require('electron').ipcRenderer;
+  const { webFrame } = require('electron');
   
   let selectedRows = [];
   let violatedRows = [];
@@ -9,6 +10,8 @@
   window.addEventListener("load", init);
 
   function init() {
+    webFrame.setZoomFactor(1)
+
     qsa("header > nav a").forEach((node) => node.addEventListener("click", openView));
     id("data-options-toggler").addEventListener("click", () => id("data-options").classList.toggle("collapsed"));
     id("add-database-button").addEventListener("click", addDatabase);
@@ -130,7 +133,7 @@
 
       if (!qs("#recent-connections *")) {
         let noRecentConnection = document.createElement("p");
-        noRecentConnection.textContent = "Databases you connect to will be shown here (once you actually connect to them)";
+        noRecentConnection.textContent = "Databases you connect to will be shown here";
 
         id("recent-connections").appendChild(noRecentConnection)
       }
@@ -341,7 +344,7 @@
       }
 
       if (qsa(".invalid-row").length > 0) {
-        throw new Error("Please resolve all foreign key conflicts before saving!")
+        throw new Error("There are unresolved errors!")
       }
 
       res = await ipc.invoke("commit-dataview-changes", viewingTable);
@@ -371,7 +374,7 @@
         throw new Error(res.error);
       }
 
-      console.log(res);
+      qs("#table-view .table-no-data-footer")?.remove();
 
       let row = document.createElement("tr");
       row.id = res.result[res.pk];
@@ -390,7 +393,6 @@
 
           cell.appendChild(content);
         }
-
         row.appendChild(cell);
       });
 
@@ -408,7 +410,6 @@
       let value = e.target.textContent;
       let pk = id("pk").textContent;
       let pkValue = e.target.closest('tr').id;
-      // let pkValue = this.closest("tr").children[[...id("pk").parentNode.children].indexOf(id("pk"))].textContent;
       let modifiedColumn = qs("#table-view table tr").children[[...e.target.closest("tr").children].indexOf(e.target.parentNode)];
 
       if (e.target.textContent.trim().length > 0) {
@@ -431,11 +432,11 @@
                 violatedRows[violation.table] = [];
               }
 
-              if (!violatedRows[violation.table][modifiedColumn.textContent]) {
-                violatedRows[violation.table][modifiedColumn.textContent] = [];
+              if (!violatedRows[violation.table][violation.from]) {
+                violatedRows[violation.table][violation.from] = [];
               }
 
-              violatedRows[violation.table][modifiedColumn.textContent].push(violation.rowid);
+              violatedRows[violation.table][violation.from].push(violation.rowid);
             });
 
             if (violatedIds.includes(parseInt(pkValue))) {
@@ -445,6 +446,11 @@
 
               e.target.parentNode.appendChild(popup);
             }
+          } else if (/UNIQUE/g.test(res.error.message)) {
+            e.target.classList.add('invalid-row');
+            let popup = document.createElement('div');
+            popup.textContent = "Non-unique value in unique column";
+            e.target.parentNode.appendChild(popup);
           } else {
             throw new Error(res.error);
           }
@@ -975,6 +981,8 @@
             cell.appendChild(cellcontainer);
             row.appendChild(cell);
 
+            console.log(violatedRows);
+
             if (violatedRows[table]?.[col]?.includes(rowData[tableMeta.pk])) {
               cellcontainer.classList.add("invalid-row");
               let popup = document.createElement('div');
@@ -1018,7 +1026,7 @@
 
     if (connections.length === 0) {
       let msg = document.createElement("p");
-      msg.textContent = "Databases you connect to will be shown here (once you actually connect to them)";
+      msg.textContent = "Databases you connect to will be shown here";
 
       id("recent-connections").appendChild(msg)
     } else {

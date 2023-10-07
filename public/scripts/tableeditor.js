@@ -104,11 +104,11 @@
       if (!hasChanges) {
         changesPopup(false);
       } else {
-        let newColNames = [...qsa(".col-name")].map((col) => `'${col.textContent}'`);
+        let newColNames = [...qsa(".col-name")].map((col) => `"${col.textContent}"`);
 
         let defaults = [...qsa(".def")].map((def) => def.value);
         
-        let qry = await ipc.invoke("update-table", creationStmt(), id("table-name").value, newColNames, defaults);
+        let qry = await ipc.invoke("update-table", creationStmt(), id("table-name").value, newColNames.reverse(), defaults);
         if (qry.type === "err") {
           throw new Error(qry.err);
         }
@@ -390,7 +390,11 @@
       });
     }
     
-    qs("#row-builder tbody").appendChild(row)
+    if (qs("#row-builder tbody tr")) {
+      qs("#row-builder tbody tr").parentNode.insertBefore(row, qs("#row-builder tbody tr").nextSibling);
+    } else {
+      qs("#row-builder tbody").appendChild(row)
+    }
   }
 
   async function populateWithOtherColumns(input, foreignKey) {
