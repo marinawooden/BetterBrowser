@@ -187,6 +187,36 @@ th:first-of-type {
   animation-delay: 0.5s !important;
 }
 
+.invalid-row {
+  background-color: #fa80722e;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: #e43030;
+}
+
+.invalid-row + div::before {
+  content: url(../images/triangle-top.svg);
+  position: absolute;
+  transform: translateY(-10.6px);
+}
+
+.invalid-row + div {
+  position: absolute;
+  background-color: #fa807291;
+  color: black;
+  white-space: nowrap;
+  padding: 0.2em 0.8em;
+  border-radius: 0.3em;
+  left: 0;
+  opacity: 0;
+  transition: 0.5s all;
+  transform: translateY(6px);
+}
+
+.invalid-row:hover + div {
+  opacity: 1;
+}
+
 #database-structure > li > div {
   display: flex;
   justify-content: space-between;
@@ -453,6 +483,10 @@ select {
   position: relative;
   display: inline-block;
   white-space: normal;
+}
+
+#table-view td {
+  position: relative;
 }
 
 .options-icon {

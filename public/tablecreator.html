@@ -34,18 +34,20 @@
       </div>
       <button id="create-table">+ Create Table</button>
     </form>
-    <table id="row-builder">
-      <tr>
-        <th></th>
-        <th>Name</th>
-        <th>Type</th>
-        <th data-detail="non-null">NN</th>
-        <th data-detail="autoincrement">AI</th>
-        <th data-detail="unique">U</th>
-        <th data-detail="foreign-key">FK</th>
-        <th>Default Value</th>
-      </tr>
-    </table>
+    <div id="row-builder-holder">
+      <table id="row-builder">
+        <tr>
+          <th></th>
+          <th>Name</th>
+          <th>Type</th>
+          <th data-detail="non-null">NN</th>
+          <th data-detail="autoincrement">AI</th>
+          <th data-detail="unique">U</th>
+          <th data-detail="foreign-key">FK</th>
+          <th>Default Value</th>
+        </tr>
+      </table>
+    </div>
     <div class="table-attachment">
       <p id="add-row">+ Add a Row</p>
     </div>
@@ -54,10 +56,8 @@
         <div id="rows">
         </div>
         <span id="primary-key" class="hidden">PRIMARY KEY("<span id='primary-key-name'></span>"<span id="autoincrement"></span>)</span>
-        <div id="foreign-keys">
-          
-        </div>
-      <br>);
+        <div id="foreign-keys"></div>
+      );
     </div>
   </main>
 </body>

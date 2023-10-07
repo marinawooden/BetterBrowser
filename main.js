@@ -28,7 +28,7 @@ let csvPath;
 const openTableCreator = () => {
   tableCreator = new BrowserWindow({
     width: 600,
-    height: 450,
+    height: 600,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: true,
@@ -66,8 +66,6 @@ const openTableEditor = () => {
   })
 
   tableEditor.on('closed', () => {
-    // console.log("")
-    // editingTable = null
     tableEditor = null
   })
 
@@ -106,7 +104,7 @@ ipcMain.handle("add-new-rows", async (event, ...args) => {
     let placeholderString = `(${columnNames.map(() => "?")})`;
     let query = `INSERT INTO ${viewingTable} (${formatColumns(columnNames)}) VALUES ${columnValues.map(() => placeholderString)}`;
 
-    await previewDB.conn.exec("BEGIN TRANSACTION;");
+    await previewDB.conn.exec("BEGIN TRANSACTION;\n");
     await previewDB.conn.run(query, columnValues.flat(1));
     await previewDB.conn.exec("COMMIT;")
 
@@ -118,6 +116,7 @@ ipcMain.handle("add-new-rows", async (event, ...args) => {
 
     return {
       "type": "err",
+      "detail": err.code,
       "error": err
     }
   }
@@ -128,39 +127,51 @@ ipcMain.handle("add-new-rows", async (event, ...args) => {
  */
 ipcMain.handle("add-dataview-changes", async (event, ...args) => {
   try {
-    
+    console.log("ADDING DATAVIEW CHANGES")
     let table = args[0];
     let modifiedColumn = args[1];
     let value = args[2];
     let pk = args[3];
     let pkValue = args[4];
 
-    console.log("EDITING " + table)
-    console.log(pk);
-    console.log(pkValue);
-    console.log(value);
-    console.log(modifiedColumn);
-
     if (!table || !modifiedColumn || !value || !pk || !pkValue || !db || !previewDB.conn) {
       throw new Error("Missing required arguments!");
     }
 
-    let query = `UPDATE ${table} SET \`${modifiedColumn}\` = ? WHERE \`${pk}\` = ?;`;
-    let prevChanges = await previewDB.conn.run(query, value, pkValue);
+    await previewDB.conn.exec(`BEGIN TRANSACTION;`);
+    await previewDB.conn.run(`UPDATE ${table} SET \`${modifiedColumn}\` = ? WHERE \`${pk}\` = ?;`, value, pkValue);
+    let violations = await previewDB.conn.all("PRAGMA foreign_key_check");
 
-    console.log(`UPDATE ${table} SET \`${modifiedColumn}\` = ? WHERE \`${pk}\` = ${pkValue};`);
-    console.log(prevChanges);
-    let res = await previewDB.conn.get(`SELECT * FROM ${table} WHERE ${pk} = ?`, prevChanges.lastID);
-    console.log(res);
+    if (violations.length > 0) {
+      throw new Error("fk");
+    }
+
+    await previewDB.conn.exec(`COMMIT;`);
 
     return {
       "type": "success"
     }
   } catch (err) {
-    return {
-      "type": "err",
-      "error": err
+    if (err.message === "fk") {
+      let violations = await previewDB.conn.all("PRAGMA foreign_key_check");
+      await previewDB.conn.exec(`COMMIT;`);
+
+      return {
+        "type": "err",
+        "error": "SQLITE_CONSTRAINT",
+        "violations": violations
+      }
+    } else {
+      await previewDB.conn.exec("ROLLBACK;")
+      return {
+        "type": "err",
+        "detail": err.code,
+        "error": err
+      }
     }
+    console.log(err);
+    
+    
   }
 });
 
@@ -169,32 +180,24 @@ ipcMain.handle("commit-dataview-changes", async (event, ...args) => {
   try {
     let changedTable = args[0];
 
-    if (!db || !previewDB || !changedTable) {
+    if (!changedTable || !currentDBPath || !previewDB.location) {
       throw new Error("Missing necessary input");
     }
 
-    let tmp = Date.now();
-    // begin transaction
-    await db.exec(`BEGIN TRANSACTION;`);
-    // drop original table
-    await db.exec(`DELETE FROM ${changedTable};`);
-    // attach staging database
-    await db.exec(`ATTACH DATABASE "${previewDB.location}" AS ${tmp};`);
-    // copy editing table contents into new table
-    await db.exec(`INSERT INTO ${changedTable} SELECT * FROM \`${tmp}\`.\`${changedTable}\`;`)
-    // commit transaction
-    await db.exec(`COMMIT;`);
-    // detach staging database
-    await db.exec(`DETACH DATABASE ${tmp};`);
+    let violations = await previewDB.conn.all("PRAGMA foreign_key_check;");
+    if (violations.length > 0) {
+      throw new Error("Please resolve all foreign key conflicts!");
+    }
 
-    console.log("Success!");
+    // just copy file
+    await fsasync.copyFile(previewDB.location, currentDBPath);
+    await db.close();
+    db = await getDBConnection(currentDBPath);
+
     return {
       "type": "success"
     }
   } catch (err) {
-    await db.exec(`ROLLBACK;`);
-    console.log("ERORORORORORORORORORORORO")
-
     return {
       "type": "err",
       "error": err
@@ -212,8 +215,11 @@ ipcMain.handle("get-other-columns", async (event, ...args) => {
       throw new Error("No database or currently open table was given");
     }
 
+    let saufCurrent = args[0];
     let ans = {};
-    let tblnames = (await db.all(`SELECT tbl_name FROM sqlite_master WHERE tbl_name NOT LIKE "sqlite_sequence"`)).map((tbl) => tbl.tbl_name);
+    let query = `SELECT tbl_name FROM sqlite_master WHERE tbl_name NOT LIKE "sqlite_sequence"${saufCurrent ? ` AND tbl_name NOT LIKE "${editingTable}"` : ``}`;
+    console.log(query);
+    let tblnames = (await db.all(query)).map((tbl) => tbl.tbl_name);
 
     for (const tbl of tblnames) {
       let colnames = (await db.all(`PRAGMA table_info("${tbl}")`)).map((col) => col.name);
@@ -276,10 +282,10 @@ ipcMain.handle("remove-connection", async (event, ...args) => {
       throw new Error("Missing required arguments");
     }
 
-    if (pathToRemove === currentDBPath) {
-      await db.close();
-      db = null;
-    }
+    // if (pathToRemove === currentDBPath && db) {
+    //   await db?.close();
+    //   db = null;
+    // }
 
     const recentconnections = await store.get('recent-db');
     const index = recentconnections.indexOf(pathToRemove);
@@ -396,8 +402,11 @@ ipcMain.handle("create-from-csv", async (event, ...args) => {
     query += insertStatements.join(";");
 
     console.log(query);
+    await previewDB.conn.exec(query);
     await db.exec(query);
+    await previewDB.conn.exec("COMMIT;");
     await db.exec("COMMIT;");
+    
 
     win.webContents.send("table-added");
 
@@ -408,6 +417,7 @@ ipcMain.handle("create-from-csv", async (event, ...args) => {
       "type": "success"
     }
   } catch (err) {
+    await previewDB.conn("ROLLBACK;");
     await db.exec("ROLLBACK;");
     console.log(err);
     return {
@@ -552,6 +562,7 @@ ipcMain.handle("delete-col", async (event, ...args) => {
     let query = `ALTER TABLE ${editingTable} DROP COLUMN ${coltodrop};`;
 
     await db.exec(query);
+    await previewDB.conn.exec(query);
 
     win.webContents.send("edits-complete");
 
@@ -588,8 +599,6 @@ ipcMain.handle('update-table', async (event, ...args) => {
       throw new Error("Missing required arguments");
     }
 
-    console.log(defaults)
-
     let ogColumns = (await db.all(`SELECT name FROM pragma_table_info("${editingTable}")`)).map((col, i) =>  {
       return defaults[i] ? `COALESCE(\`${col.name}\`, "${defaults[i].replace(/'/g, "''")}")` : `\`${col.name}\``;
     });
@@ -598,10 +607,8 @@ ipcMain.handle('update-table', async (event, ...args) => {
       ogColumns.push(defaults[i + ogColumns.length] ? `TEXT("${defaults[i + ogColumns.length]})"` : "NULL")
     }
 
-    console.log(ogColumns);
-
     // console.log(ogColumns);
-    let query = "PRAGMA foreign_keys=off;\nBEGIN TRANSACTION;";
+    let query = "BEGIN TRANSACTION;";
     let tmpname = `"${Date.now()}"`;
 
     query += `\nCREATE TABLE ${tmpname} (\n${creationStmt}\n);`;
@@ -609,15 +616,8 @@ ipcMain.handle('update-table', async (event, ...args) => {
     query += `\nDROP TABLE "${editingTable}";`;
     query += `\nALTER TABLE ${tmpname} RENAME TO \`${newName}\`;`;
 
-    // COALESCE 
-    console.log("QUERY");
-    console.log(query);
-
     await db.exec(query);
     await previewDB.conn.exec(query);
-
-    await db.exec("\nCOMMIT;\nPRAGMA foreign_keys=on;")
-    await previewDB.conn.exec("\nCOMMIT;\nPRAGMA foreign_keys=on;")
 
     editingTable = newName;
     win.webContents.send("edits-complete");
@@ -627,12 +627,13 @@ ipcMain.handle('update-table', async (event, ...args) => {
     }
     
   } catch (err) {
-    await db.exec("ROLLBACK;\nPRAGMA foreign_keys=on;");
+    await db.exec("ROLLBACK;");
+    await previewDB.conn.exec("ROLLBACK;");
     console.log("ERROR HERE")
     console.log(err);
     return {
       "type": "err",
-      "err": err.code == "SQLITE_CONSTRAINT" ? err.message + ".  Try adding a default value to this column." : err
+      "err": err
     }
   }
 });
@@ -703,11 +704,13 @@ ipcMain.handle('delete-table', async (event, ...args) => {
 
     let query = `DROP TABLE IF EXISTS "${tablename}"`;
     await db.exec(query);
+    await previewDB.conn.exec(query);
 
     return {
       "type": "success"
     }
   } catch (err) {
+    console.log(err);
     return {
       "type": "err",
       "err": err
@@ -766,6 +769,7 @@ ipcMain.handle('save-changes', async (event, ...args) => {
   } catch (err) {
     // console.log("ERROR HANDLING REACHED")
     await db.exec("ROLLBACK;");
+    await previewDB.conn.exec("ROLLBACK;");
 
     return {
       "type": "err",
@@ -791,9 +795,9 @@ ipcMain.handle('increment-lastid', async (event, ...args) => {
       throw new Error("No table found.");
     }
 ;
-    let test = await db.get("SELECT * FROM sqlite_sequence WHERE name = ?", table);
+    let test = await previewDB.conn.get("SELECT * FROM sqlite_sequence WHERE name = ?", table);
     if (test) {
-      await db.run("UPDATE sqlite_sequence SET seq = ? WHERE name = ?", newId, table);
+      await previewDB.conn.run("UPDATE sqlite_sequence SET seq = ? WHERE name = ?", newId, table);
     }
 
     return {
@@ -807,6 +811,35 @@ ipcMain.handle('increment-lastid', async (event, ...args) => {
   }
 });
 
+ipcMain.handle('add-empty-row', async (event, ...args) => {
+  try {
+    if (!db || !previewDB.conn || !args[0]) {
+      throw new Error("Missing required arguments!");
+    }
+
+    let table = args[0];
+    await previewDB.conn.exec("BEGIN TRANSACTION;")
+    let pk = (await db.all(`PRAGMA table_info("${table}")`)).find((col) => col.pk === 1).name;
+    let res = await previewDB.conn.run(`INSERT INTO ${table} DEFAULT VALUES`);
+    let lastRecord = await previewDB.conn.get(`SELECT * FROM ${table} WHERE ${pk} = ?`, res.lastID);
+    await previewDB.conn.exec("COMMIT;");
+    
+    
+    return {
+      "type": "success",
+      "result": lastRecord,
+      "pk": pk
+    }
+  } catch (err) {
+    await previewDB.conn.exec("ROLLBACK;");
+    return {
+      "type": "err",
+      "error": err
+    }
+  }
+})
+
+// DEPRECATED
 ipcMain.handle('new-row-meta', async (event, ...args) => {
   try {
     let table = args[0] || editingTable;
@@ -842,7 +875,7 @@ ipcMain.handle('new-row-meta', async (event, ...args) => {
     if (isAutoincrement) {
       lastid = await db.get("SELECT seq FROM sqlite_sequence WHERE name = ?", table);
     }
-    
+
     return {
       "pk": pk.name,
       "columns": columns.map((col) => col.name),
@@ -898,7 +931,7 @@ ipcMain.handle('remove-rows', async (event, ...args) => {
 
 ipcMain.handle('get-table-meta', async (event, ...args) => {
   try {
-    if (db) {
+    if (db && previewDB.conn) {
       console.log(editingTable);
       tblname = args[0] || editingTable;
 
@@ -908,18 +941,18 @@ ipcMain.handle('get-table-meta', async (event, ...args) => {
 
       let getCreateStmt = "SELECT * FROM sqlite_master WHERE type = 'table' AND name = ?";
       let isAutoincrement = "SELECT * FROM sqlite_master WHERE type = 'table' AND name = ? AND sql LIKE '%AUTOINCREMENT%'";
-      let results = await db.get(getCreateStmt, tblname);
+      let results = await previewDB.conn.get(getCreateStmt, tblname);
 
       if (results) {
         // TODO: Fun- sql injection potentially
         let getPk = 'PRAGMA table_info("' + tblname + '")';
-        let columns = await db.all(getPk);
+        let columns = await previewDB.conn.all(getPk);
         let pk = columns.find((col) => col.pk === 1);
 
         return {
           "name": tblname,
           "sql": results.sql,
-          "pk": pk.name,
+          "pk": pk?.name,
           "isAutoincrement": !(!isAutoincrement)
         };
       } else {
@@ -1035,7 +1068,10 @@ ipcMain.handle('retrieve-tables', async () => {
     }
   } catch (err) {
     console.error(err);
-    return "Error"
+    return {
+      "type": "err",
+      "error": err
+    }
   }
 })
 
@@ -1084,6 +1120,7 @@ ipcMain.handle('open-database', async (event, ...args) => {
         // populate the db
         let commands = await fsasync.readFile(sqlPath, "utf-8");
         await db.exec(commands);
+        await previewDB.conn.exec(commands);
       }
 
       let existing = store.get('recent-db');
@@ -1120,7 +1157,12 @@ ipcMain.handle('add-database', async () => {
   try {
     let selectedPath = openSaveDialog();
 
-    if (selectedPath) {
+    if (!selectedPath["canceled"]) {
+      console.log("HERE*****************************")
+      console.log(selectedPath);
+
+      await fsasync.unlink(selectedPath);
+
       db = await getDBConnection(selectedPath);
       await createPreviewDb(selectedPath);
       console.log(previewDB)
@@ -1138,10 +1180,16 @@ ipcMain.handle('add-database', async () => {
 
       return selectedPath;
     } else {
-      return "No Path Selected";
+      return {
+        "type": "pass",
+        "error": "No Path Selected"
+      };
     }
   } catch (err) {
-    return err.message;
+    return {
+      "type": "err",
+      "error": err
+    };
   }
 });
 
@@ -1152,6 +1200,8 @@ ipcMain.handle('add-table', async (event, ...args) => {
       let query = args[0];
       await db.run(query);
       await previewDB.conn.run(query);
+
+      console.log(query);
 
       win.webContents.send("table-added");
       tableCreator.close();
@@ -1203,9 +1253,10 @@ async function createPreviewDb(dbPath) {
 // // somewhere in your app.js (after all // endpoint definitions)
 async function getDBConnection(name) {
   const db = await sqlite.open({
-      filename: name,
-      driver: sqlite3.Database
+    filename: name,
+    driver: sqlite3.Database
   });
+
   return db;
 } 
 
@@ -1304,6 +1355,7 @@ const createWindow = async () => {
   });
 
   win.loadFile('public/index.html')
+  win.webContents.setZoomFactor(1.0);
   // win.webContents.openDevTools()
 }
 

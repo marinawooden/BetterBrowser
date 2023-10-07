@@ -22,10 +22,18 @@ const ipc = require('electron').ipcRenderer;
     });
   }
 
+  function insertAfter(newNode, existingNode) {
+    existingNode.parentNode.insertBefore(newNode, existingNode.nextSibling);
+  }
+
   function addRow(name) {
     let newRow = buildRowElement(name);
-    qs("#row-builder tbody").appendChild(newRow);
-
+    if (qsa("#row-builder tr").length > 0) {
+      insertAfter(newRow, qs("#row-builder tr"));
+    } else {
+      qs("#row-builder tbody").appendChild(newRow);
+    }
+    
     // logic for updating primary key options
     let newPkOption = document.createElement("option");
     newPkOption.value = newRow.dataset.name;
@@ -33,6 +41,7 @@ const ipc = require('electron').ipcRenderer;
     id("pk").appendChild(newPkOption);
 
     checkIfHasRows();
+    responsiveDataViewColumns(id("row-builder"));
   }
 
   function checkIfHasRows() {
@@ -70,6 +79,7 @@ const ipc = require('electron').ipcRenderer;
     closTd.appendChild(closeButton);
 
     let name = document.createElement("p");
+    name.classList.add("col-name");
     name.contentEditable = true;
     name.textContent = colName ? colName : `Field${rowNum}`;
     name.addEventListener("input", updateRowName);
@@ -78,7 +88,7 @@ const ipc = require('electron').ipcRenderer;
     let typeSelect = document.createElement("select");
     typeSelect.addEventListener("change", (e) => {
       // change the type
-      let nameDisplayed = qs("p[class='" + (row.dataset.name) + "']").querySelector(".col-type");
+      let nameDisplayed = qs("p[class='" + (colName ? colName : `Field${rowNum}`) + "']").querySelector(".col-type");
       nameDisplayed.textContent = e.currentTarget.value;
     })
 
@@ -128,6 +138,7 @@ const ipc = require('electron').ipcRenderer;
     fornTd.appendChild(fk);
 
     let defV = document.createElement("input");
+    defV.classList.add("def");
     defV.type = "text";
     defV.name = `row-${rowNum}-name`;
     defVTd.appendChild(defV);
@@ -170,18 +181,20 @@ const ipc = require('electron').ipcRenderer;
 
         for (let i = 0; i < rows.length; i++) {
           let row = rows[i];
-          if (i === 0 && !id("fk-row")) {
+          if (!id("fk-row")) {
             let rowHead = document.createElement("th");
             rowHead.textContent = "Foreign Keys";
             rowHead.id = "fk-row";
 
             row.appendChild(rowHead);
-          } else if (row.querySelector("input[name='row-" + i + "-fk']:checked")) {
+          }
 
+          if (row.querySelector(".fk-check")?.checked && !row.querySelector(".fk")) {
             let rowSelectHolder = document.createElement("td");
             let rowSelect = document.createElement("select");
             let foreignKeys = await getForeignKeys();
 
+            console.log(foreignKeys.results);
             Object.keys(foreignKeys.results).forEach((table) => {
               let columns = foreignKeys.results[table];
               let optgroup = document.createElement("optgroup");
@@ -199,8 +212,12 @@ const ipc = require('electron').ipcRenderer;
             rowSelectHolder.classList.add("fk");
             rowSelectHolder.appendChild(rowSelect);
 
-            rowSelect.addEventListener("change", addNewForeignKeyToStatement);
+            rowSelect.addEventListener("change", function() {
+              addNewForeignKeyToStatement(this)
+            });
             row.appendChild(rowSelectHolder);
+            addNewForeignKeyToStatement(rowSelect);
+            responsiveDataViewColumns(id("row-builder"));
           }
         }
       } else {
@@ -216,12 +233,89 @@ const ipc = require('electron').ipcRenderer;
     }
   }
 
+  function getNewColumnMeta() {
+    let columns = [...qsa("#row-builder tr")];
+    columns.shift();
+
+    const DEFAULTS = {
+      "INTEGER": -1,
+      "REAL": -1.0,
+      "TEXT": "-",
+      "BLOB": "-",
+    }
+
+    
+    return [...columns].map((col) => {
+      console.log(col);
+      let defaultValue = col.querySelector(".def").value;
+
+      if (col.querySelector(".nn").checked && !col.querySelector(".def").value) {
+        defaultValue = DEFAULTS[col.querySelector("select").value]
+      };
+
+      let def = `${col.querySelector("select").value} ${col.querySelector(".nn").checked ? "NOT NULL" : ""} ${col.querySelector(".u").checked ? "UNIQUE" : ""} ${defaultValue ? `DEFAULT "${defaultValue}"` : ""}`.trim();
+      return [col.querySelector(".col-name")?.textContent, def];
+    });
+  }
+
+  function parseForeignKeys() {
+    return [...qsa(".fk:checked")].map((input) => {
+      let colName = input.closest("tr").dataset.name;
+      let references = input.closest("tr").querySelector(".fk-value").value;
+      let referencesTable = references.split(".")[0];
+      let referencesColumn = references.split(".")[1];
+
+      return `\nFOREIGN KEY("${colName}") REFERENCES "${referencesTable}"("${referencesColumn}")`
+    });
+  }
+
+  function creationStmt() {
+    try {
+      let columnMeta = getNewColumnMeta();
+      let columnNames = [...columnMeta].map((col) => {
+        return `\n"${col[0]}" ${col[1]}`
+      });
+      let primaryKey = `\nPRIMARY KEY ("${id('pk').value}"${qs("tr[data-name='" + id('pk').value + "'] .ai")?.checked ? " AUTOINCREMENT" : ""}`;
+      let foreignKeys = parseForeignKeys()
+
+  //     "rating"	INTEGER NOT NULL DEFAULT 1,
+	// FOREIGN KEY("identifier") REFERENCES "Games",
+	// PRIMARY KEY("identifier" AUTOINCREMENT)
+      let query = `
+        ${columnNames},${foreignKeys.length > 0 ? foreignKeys + "," : ""}${primaryKey})
+      `.trim();
+
+      console.log(query);
+
+      return query;
+    } catch (err) {
+      console.log(err);
+    }
+  }
+
+  function responsiveDataViewColumns(table) {
+    // the max width
+    // qs("#viewer")
+
+    let tableWidth = table?.parentNode?.offsetWidth - 210;
+    let numColumns = table?.querySelectorAll("th").length - 1;
+
+    let content = table?.querySelectorAll("td p, td input[type='text']");
+
+    if (content) {
+      [...content].forEach((elem) => {
+        elem.style.maxWidth = `${tableWidth / numColumns}px`;
+        elem.style.minWidth = `${tableWidth / numColumns}px`;
+      });
+    }
+  }
+
   /** FOREIGN KEY("identifier") REFERENCES "Games"("identifier") */
-  function addNewForeignKeyToStatement(e) {
-    let fkey = this.value;
+  function addNewForeignKeyToStatement(selection) {
+    let fkey = selection.value;
     let referencesTable = fkey.split(".")[0];
     let referencesColum = fkey.split(".")[1];
-    let colInTable = this.closest("tr").dataset.name;
+    let colInTable = selection.closest("tr").dataset.name;
     let stmt = document.createElement("p");
 
     if (id(`${colInTable}-fk`)) {
@@ -347,9 +441,13 @@ const ipc = require('electron').ipcRenderer;
   async function makeNewTable(e) {
     e.preventDefault();
     try {
-      let query = qs("#create-table-query").textContent;
+      // let query = qs("#create-table-query").textContent;
+      let query = `CREATE TABLE ${id("new-table-name").textContent} (\n`;
+      query += creationStmt();
+      query += "\n);";
+      
       let tables = await ipc.invoke('add-table', query);
-      alert(tables);
+      // alert(tables);
     } catch (err) {
       alert(err);
     }

@@ -60,6 +60,7 @@ main {
   top: 0px;
   background-color: var(--bg-lighter);
   z-index: 10;
+  white-space: nowrap;
 }
 
 table p {
@@ -80,7 +81,7 @@ table p:focus {
 
 #row-builder-holder {
   overflow-y: scroll;
-  border-radius: 10px;
+  border-radius: 10px 10px 0 0;
 }
 
 #rows p {

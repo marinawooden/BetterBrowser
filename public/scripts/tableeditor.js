@@ -339,6 +339,8 @@
     fkInput.classList.add(`fk-value`);
     fkInput.classList.add("hidden")
 
+    fkInput.addEventListener("change", () => hasChanges = true)
+
     if (foreignKey) {
       fk.querySelector("input").checked = true;
       fkInput.classList.remove("hidden");
@@ -393,12 +395,13 @@
 
   async function populateWithOtherColumns(input, foreignKey) {
     try {
-      let res = await ipc.invoke("get-other-columns");
+      let res = await ipc.invoke("get-other-columns", true);
       if (res.type === "err") {
         throw new Error(res.error);
       }
 
       let groups = Object.keys(res.results);
+      console.log(groups);
       groups.forEach((group) => {
         let optgroup = document.createElement("optgroup");
         optgroup.label = group;
@@ -407,8 +410,11 @@
           opt.value = `${group}.${val}`;
           opt.textContent = val;
 
+          console.log(opt.value);
+          console.log(foreignKey);
+
           if (opt.value === foreignKey) {
-            optgroup.selected = true;
+            opt.selected = true;
           }
 
           optgroup.appendChild(opt);

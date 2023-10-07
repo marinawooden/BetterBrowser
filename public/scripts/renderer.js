@@ -3,6 +3,7 @@
   const ipc = require('electron').ipcRenderer;
   
   let selectedRows = [];
+  let violatedRows = [];
   let pageViewing = 0;
 
   window.addEventListener("load", init);
@@ -117,15 +118,15 @@
 
       toRemove.remove();
 
-      if (qs("#database-structure p").textContent === toRemoveName) {
-        id("database-structure").remove();
-        let noDatabaseOpenText = document.createElement("p");
-        noDatabaseOpenText.textContent = "No database is currently open, please create one or open one from a file";
+      // if (qs("#database-structure p")?.textContent === toRemoveName) {
+      //   id("database-structure").remove();
+      //   let noDatabaseOpenText = document.createElement("p");
+      //   noDatabaseOpenText.textContent = "No database is currently open, please create one or open one from a file";
 
-        id("table-schema-view").appendChild(noDatabaseOpenText);
-        id("table-name").innerHTML = "";
-        qs("#table-view table").remove();
-      }
+      //   id("table-schema-view").appendChild(noDatabaseOpenText);
+      //   id("table-name").innerHTML = "";
+      //   qs("#table-view table").remove();
+      // }
 
       if (!qs("#recent-connections *")) {
         let noRecentConnection = document.createElement("p");
@@ -133,11 +134,15 @@
 
         id("recent-connections").appendChild(noRecentConnection)
       }
-      // await populateDbView();
-      // await populateDataViewerOptions();
     } catch (err) {
       handleError(err);
     }
+  }
+
+  function closeDataView() {
+    id("table-name").innerHTML = "";
+    qs(".table-no-data-footer")?.remove();
+    qs("#table-view table")?.remove();
   }
 
   async function searchForQuery(page = 0) {
@@ -255,9 +260,10 @@
     no.classList.add("no");
 
     no.addEventListener("click", () => {
-      qs("#database-structure div:not(.collapsed)")?.classList.add("collapsed");
+      qs("#database-structure ul div:not(.collapsed)")?.classList.add("collapsed");
       popup.remove();
-    })
+    });
+    
     yes.addEventListener("click", async () => {
       await deleteTable(table);
       popup.remove();
@@ -315,152 +321,143 @@
       let res;
 
       if (columnValues.length > 0) {
-        res = await ipc.invoke("add-new-rows", viewingTable, getNewColumnValues(), getColumnNames());
+        res = await ipc.invoke("add-new-rows", viewingTable, getNewColumnValues(), getColumnNames(), force);
         if (res.type === "err") {
-          throw new Error(res.error);
+          if (res.detail === "SQLITE_CONSTRAINT") {
+            // blah factor
+            throw new Error("Please resolve all foreign key conflicts before saving!");
+          } else {
+            throw new Error(res.error);
+          }
         }
 
-        [...qsa(".new-row")].forEach((row) => row.classList.remove("new-row"));
+        [...qsa(".new-row")].forEach((row) => {
+          row.classList.remove("new-row")
+          row.querySelectorAll("p").forEach((inpt) => {
+            // TODO: NEW ROWS
+            inpt.addEventListener("input", saveDataViewerInput)
+          });
+        });
+      }
+
+      if (qsa(".invalid-row").length > 0) {
+        throw new Error("Please resolve all foreign key conflicts before saving!")
       }
 
       res = await ipc.invoke("commit-dataview-changes", viewingTable);
 
       if (res.type === "err") {
+        // console.log(res);
         throw new Error(res.error);
       }
-
       qs(".unsaved")?.classList.remove("unsaved");
-
-      // TODO: Reload
       await populateDbView();
-      // await populateDataViewerOptions();
 
     } catch (err) {
-      handleError(err);
+      if (!/cannot rollback/g.test(err.message)) {
+        handleError(err);
+      }
     }
+  }
+
+  function insertAfter(newNode, existingNode) {
+    existingNode.parentNode.insertBefore(newNode, existingNode.nextSibling);
   }
 
   async function addNewRow() {
     try {
-      let info = await retrieveNewRowInfo();
-
-      if (info.type === "err") {
-        throw new Error(info.err)
+      let res = await ipc.invoke("add-empty-row", id("table-name").value);
+      if (res.type === "err") {
+        throw new Error(res.error);
       }
 
-      id("data-options").classList.add("collapsed");
-      if (qs(".table-no-data-footer")) {
-        qs(".table-no-data-footer").classList.add("hidden");
-      }
+      console.log(res);
 
-      qs("a[href='#viewer']").classList.add("unsaved");
+      let row = document.createElement("tr");
+      row.id = res.result[res.pk];
 
-      let table = qs("#table-view table");
-      let newRow = document.createElement("tr");
+      ["", ...Object.keys(res.result)].forEach((col, i) => {
+        let cell = document.createElement("td");
+        if (i === 0) {
+          let checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          cell.appendChild(checkbox);
+        } else {
+          let content = document.createElement("p");
+          content.addEventListener("input", saveDataViewerInput);
+          content.textContent = res.result[col];
+          content.contentEditable = true;
 
-      newRow.classList.add("new-row");
-
-      let firstCol = document.createElement("td");
-      let checkBox = document.createElement("input");
-      checkBox.type = "checkbox";
-      if (selectedRows.includes(newRow.id + "")) {
-        checkBox.checked = true;
-      }
-
-      checkBox.addEventListener("click", recordCheck)
-
-      firstCol.appendChild(checkBox);
-      newRow.prepend(firstCol);
-
-      console.log(info);
-      for (let i = 0; i < info.columns?.length; i++) {
-        let col = info.columns[i];
-        let colHolder = document.createElement("td");
-        let newCol = document.createElement("p");
-        let def = info.defaults ? info.defaults[col] : "";
-        newCol.textContent = def || "";
-
-        if (col === info.pk) {
-          newRow.id = info.defaults ? info.defaults[i] : Date.now();
+          cell.appendChild(content);
         }
 
-        if (col === info.pk && info.isAutoincrement) {
-          // find the last id so it's not static
-          newCol.textContent = info.lastID + 1;
-          newRow.id = info.lastID + 1;
+        row.appendChild(cell);
+      });
 
-          let updateCount = await ipc.invoke("increment-lastid", info.lastID + 1, id("table-name").value);
-          if (updateCount.type == "err") {
-            throw new Error(updateCount.err);
-          }
-        }
-
-        newCol.contentEditable = true;
-
-        newCol.addEventListener("click", function() {
-          let colHeader = this.closest("table").querySelector("tr").children[i + 1].querySelector("p");
-          colHeader.classList.add("w-100");
-        });
-
-        newCol.addEventListener("blur", function() {
-          let colHeader = this.closest("table").querySelector("tr").children[i + 1].querySelector("p");
-          colHeader.classList.remove("w-100");
-        });
-
-        colHolder.appendChild(newCol);
-        newRow.appendChild(colHolder);
-      }
-
-      table.insertBefore(newRow, table.querySelector("tr").nextSibling);
-
-      if (table.querySelectorAll("tr").length > 11) {
-        table.removeChild(table.lastChild);
-      }
+      insertAfter(row, qs("#table-view tr"));
+      responsiveDataViewColumns();
     } catch (err) {
-      console.error(err);
-      alert(err);
-    }
-  }
-
-  async function saveDataViewerInput() {
-    try {
-      qs("a[href='#viewer']").classList.add("unsaved");
-      let table = id("table-name").value;
-      let value = this.textContent;
-      let pk = id("pk").textContent;
-      let pkValue = this.closest('tr').id;
-      // let pkValue = this.closest("tr").children[[...id("pk").parentNode.children].indexOf(id("pk"))].textContent;
-      let modifiedColumn = qs("#table-view table tr").children[[...this.closest("tr").children].indexOf(this.parentNode)];
-
-      console.log(modifiedColumn);
-
-      if (this.textContent.trim().length > 0) {
-        let res = await ipc.invoke("add-dataview-changes", table, modifiedColumn.textContent, value, pk, pkValue);
-        if (res.type === "err") {
-          throw new Error(res.error);
-        }
-
-        if (modifiedColumn.id === "pk") {
-          this.closest("tr").id = value;
-        }
-      }
-
-      qs("a[href='#viewer']").classList.add("unsaved");
-    } catch (err) {
-      console.error(err);
       handleError(err);
     }
   }
 
-  async function retrieveNewRowInfo() {
-    let activeTable = id("table-name").value;
-    let meta = await ipc.invoke("new-row-meta", activeTable);
+  async function saveDataViewerInput(e) {
+    try {
+      qs("a[href='#viewer']").classList.add("unsaved");
+      let table = id("table-name").value;
+      let value = e.target.textContent;
+      let pk = id("pk").textContent;
+      let pkValue = e.target.closest('tr').id;
+      // let pkValue = this.closest("tr").children[[...id("pk").parentNode.children].indexOf(id("pk"))].textContent;
+      let modifiedColumn = qs("#table-view table tr").children[[...e.target.closest("tr").children].indexOf(e.target.parentNode)];
 
-    if (meta.type === "err") {
-      throw new Error(meta.err);
+      if (e.target.textContent.trim().length > 0) {
+        let res = await ipc.invoke("add-dataview-changes", table, modifiedColumn.textContent, value, pk, pkValue);
+        violatedRows = [];
+
+        e.target.classList.remove("invalid-row");
+        e.target.parentNode.querySelector("div")?.remove();
+
+        if (res.type === "err") {
+          console.log(res);
+          if (res.error === "SQLITE_CONSTRAINT") {
+            let violatedIds = res.violations
+              .filter((violation) => violation.table === table)
+              .map((violation) => violation.rowid);
+            
+            res.violations.forEach((violation) => {
+              // There's has to be gooder way
+              if (!violatedRows[violation.table]) {
+                violatedRows[violation.table] = [];
+              }
+
+              if (!violatedRows[violation.table][modifiedColumn.textContent]) {
+                violatedRows[violation.table][modifiedColumn.textContent] = [];
+              }
+
+              violatedRows[violation.table][modifiedColumn.textContent].push(violation.rowid);
+            });
+
+            if (violatedIds.includes(parseInt(pkValue))) {
+              e.target.classList.add('invalid-row')
+              let popup = document.createElement('div');
+              popup.textContent = "Invalid foreign key";
+
+              e.target.parentNode.appendChild(popup);
+            }
+          } else {
+            throw new Error(res.error);
+          }
+        } else {
+          if (modifiedColumn.id === "pk") {
+            e.target.closest("tr").id = value;
+          }
+          qs("a[href='#viewer']").classList.add("unsaved");
+        }
+      }
+    } catch (err) {
+      handleError(err);
     }
-    
-    return meta;
   }
 
   async function removeRows() {
@@ -481,7 +478,6 @@
       }
 
       id("data-options").classList.add("collapsed");
-      // HERE
       await openTableView(activeTable);
       rows.forEach((row) => {
         row.closest("tr").remove();
@@ -644,11 +640,10 @@
       }
 
       id("table-schema-view").innerHTML = "";
-
+      closeDataView()
     } catch (err) {
       handleError(err);
     }
-    // alert("NOOO! I HAVEN'T IMPLEMENT THIS YET")
   }
 
   function createDbViewContainer(dbInfo) {
@@ -783,6 +778,11 @@
   async function getTables() {
     try {
       let tables = await ipc.invoke('retrieve-tables');
+
+      if (tables.type === "err") {
+        throw new Error(tables.error)
+      }
+
       return {
         "db": tables["db"],
         "tables": tables["tables"].filter((table) => table.tbl !== "sqlite_sequence")
@@ -843,8 +843,10 @@
     try {
       await ipc.invoke('clear-connections');
 
-      await getRecentConnections();
-      await populateDataViewerOptions();
+      if (qs("#recent-connections div")) {
+        await getRecentConnections();
+        await populateDataViewerOptions();
+      }
     } catch (err) {
       console.error(err);
       alert(err);
@@ -899,16 +901,12 @@
 
   async function openTableView(table) {
     try {
-      // id("page-next").classList.add("invisible");
-      // id("page-back").classList.add("invisible");
+      // console.log(violatedRows);
       id("search-table").value = "";
-      console.log(table);
 
       let tableData = await getDataFromTable(table);
       let tableMeta = await ipc.invoke("get-table-meta", table);
 
-      console.log(tableData);
-      console.log(tableMeta);
       if (!tableMeta.type === "err") {
         throw new Error(tableMeta.error);
       }
@@ -976,6 +974,14 @@
 
             cell.appendChild(cellcontainer);
             row.appendChild(cell);
+
+            if (violatedRows[table]?.[col]?.includes(rowData[tableMeta.pk])) {
+              cellcontainer.classList.add("invalid-row");
+              let popup = document.createElement('div');
+              popup.textContent = "Invalid foreign key";
+
+              cell.appendChild(popup);
+            }
           });
           dataViewTable.appendChild(row);
         });
@@ -1062,9 +1068,13 @@
   async function addDatabase() {
     try {
       let currentDb = await ipc.invoke('add-database');
+
+      if (currentDb.type === "err") {
+        throw new Error(currentDb.error);
+      }
+
       setCurrentDbName(currentDb);
       await populateDbView()
-
       await getRecentConnections();
       // await 
       await populateDataViewerOptions();
@@ -1105,6 +1115,7 @@
   }
 
   function handleError(err) {
+    console.error(err);
     alert(err)
   }
 })();
