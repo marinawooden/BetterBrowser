@@ -463,6 +463,10 @@ textarea,
   margin-bottom: 0;
 }
 
+.select-check {
+  max-width: 20px;
+}
+
 select {
   background-color: var(--bg-darker);
   border: 0;
@@ -489,6 +493,37 @@ select {
   background-color: var(--bg-darker);
   color: var(--text-highlight);
 }
+
+#table-view th p {
+  display: flex;
+  position: relative;
+}
+
+#table-view th:not(:first-of-type) p::after {
+  background: transparent url(../images/arrow-sort.svg) no-repeat;
+  content: ' ';
+  width: 1em;
+  height: 1em;
+  display: inline-block;
+  position: absolute;
+  right: -7px;
+  background-color: var(--bg-lighter);
+  margin: 0 0.5em;
+  opacity: 0;
+  transition: 1s ease opacity;
+}
+
+#table-view th:not(:first-of-type):hover p::after {
+  opacity: 1;
+}
+
+/* #table-view th > * {
+  display: inline;
+} */
+/* 
+#table-view th {
+  display: flex;
+} */
 
 #table-view p:focus {
   min-width: auto;
@@ -752,7 +787,7 @@ body {
 }
 
 body {
-  font-family: 'Inconsolata', monospace;
+  font-family: 'Inconsolata', 'Cousine', monospace;
 }
 
 h1, h2, h3, h4, select, #table-view > div > p {
@@ -833,6 +868,9 @@ dialog[open] {
   animation: 0.7s dialog-entrance forwards;
 }
 
+#add-table-options.collapsed {
+  margin: 0;
+}
 
 #add-table-options p {
   margin: 0 0 0 1em;

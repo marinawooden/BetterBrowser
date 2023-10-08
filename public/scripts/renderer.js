@@ -6,6 +6,7 @@
   let selectedRows = [];
   let violatedRows = [];
   let pageViewing = 0;
+  let sortingCol;
 
   window.addEventListener("load", init);
 
@@ -22,6 +23,7 @@
       await openTableView(e.currentTarget.value);
       id("select-all").textContent = "Select All Rows";
       id("select-all").classList.remove("selected");
+      id("data-options").classList.add("collapsed");
     });
     id("open-database-button").addEventListener("click", () => openDatabase());
     id("page-next").addEventListener("click", nextPage);
@@ -40,6 +42,8 @@
         this.classList.remove("selected");
         id("data-options").classList.add("collapsed")
       }
+
+      id("data-options").classList.add("collapsed");
     });
     id("save-changes").addEventListener("click", async () => {
       await saveNewChanges();
@@ -101,8 +105,6 @@
     let val = this.closest("tr").id;
     if (this.checked) {
       selectedRows.push(val);
-      console.log(selectedRows);
-
     } else {
       let i = selectedRows.indexOf(val);
       selectedRows.splice(i, 1);
@@ -148,13 +150,13 @@
     qs("#table-view table")?.remove();
   }
 
-  async function searchForQuery(page = 0) {
+  async function searchForQuery(page = 0, sortByCol, order) {
     try {
       let colnames = [...qsa("#table-view th:not(:first-of-type)")].map((elem) => elem.textContent);
       let tablename = id("table-name").value;
       let searchterm = id("search-table").value;
 
-      let res = await ipc.invoke("search-table", tablename, colnames, searchterm, page);
+      let res = await ipc.invoke("search-table", tablename, colnames, searchterm, page, sortByCol, order);
       if (res.type === "err") {
         throw new Error(res.error);
       }
@@ -227,19 +229,18 @@
   }
 
   function responsiveDataViewColumns(table) {
-    // the max width
-    // qs("#viewer")
-    // qsa("#table-view th")
-
-    let tableWidth = table?.parentNode?.offsetWidth - 210;
+    let tableWidth = table?.parentNode?.offsetWidth - 300;
     let numColumns = table?.querySelectorAll("th").length - 1;
+
+    console.log(table?.parentNode?.offsetWidth);
+    console.log(numColumns);
 
     let content = table?.querySelectorAll("p");
 
     if (content) {
       [...content].forEach((elem) => {
-        elem.style.maxWidth = `${tableWidth / numColumns}px`;
-        elem.style.minWidth = `${tableWidth / numColumns}px`;
+        elem.style.maxWidth = `${(tableWidth / numColumns)}px`;
+        elem.style.minWidth = `${(tableWidth / numColumns)}px`;
       });
     }
   }
@@ -344,17 +345,18 @@
       }
 
       if (qsa(".invalid-row").length > 0) {
-        throw new Error("There are unresolved errors!")
+        throw new Error("Please resolve all errors before saving!")
       }
 
       res = await ipc.invoke("commit-dataview-changes", viewingTable);
 
       if (res.type === "err") {
-        // console.log(res);
         throw new Error(res.error);
       }
+
       qs(".unsaved")?.classList.remove("unsaved");
       await populateDbView();
+      id("data-options").classList.add("collapsed");
 
     } catch (err) {
       if (!/cannot rollback/g.test(err.message)) {
@@ -382,9 +384,13 @@
       ["", ...Object.keys(res.result)].forEach((col, i) => {
         let cell = document.createElement("td");
         if (i === 0) {
+          let checkboxHolder = document.createElement("div");
           let checkbox = document.createElement("input");
           checkbox.type = "checkbox";
-          cell.appendChild(checkbox);
+
+          checkboxHolder.classList.add("select-check")
+          checkboxHolder.appendChild(checkbox);
+          cell.appendChild(checkboxHolder);
         } else {
           let content = document.createElement("p");
           content.addEventListener("input", saveDataViewerInput);
@@ -398,6 +404,7 @@
 
       insertAfter(row, qs("#table-view tr"));
       responsiveDataViewColumns();
+      id("data-options").classList.add("collapsed");
     } catch (err) {
       handleError(err);
     }
@@ -419,8 +426,12 @@
         e.target.classList.remove("invalid-row");
         e.target.parentNode.querySelector("div")?.remove();
 
+        qsa(".invalid-row").forEach((row) => {
+          row.classList.remove("invalid-row");
+          row.parentNode.querySelector("div").remove();
+        })
+
         if (res.type === "err") {
-          console.log(res);
           if (res.error === "SQLITE_CONSTRAINT") {
             let violatedIds = res.violations
               .filter((violation) => violation.table === table)
@@ -489,6 +500,7 @@
         row.closest("tr").remove();
       });
 
+      id("data-options").classList.add("collapsed");
     } catch (err) {
       console.error(err);
       alert(err.message);
@@ -517,9 +529,19 @@
     }
 
     if (id("search-table").value.trim().length > 0) {
-      searchForQuery(pageViewing)
+      // searchForQuery(pageViewing)
+
+      let order = id("table-view").classList.contains("sorted");
+
+      console.log(order);
+      if (order) {
+        searchForQuery(pageViewing, sortingCol, order ? "DESC" : "ASC")
+      } else {
+        searchForQuery(pageViewing)
+      }
     } else {
-      openTableView(id("table-name").value);
+      let order = id("table-view").classList.contains("sorted") ? "DESC" : "ASC";
+      openTableView(id("table-name").value, sortingCol, order);
     }
 
     if (pageViewing === 0) {
@@ -527,14 +549,22 @@
     }
 
     responsiveDataViewColumns(qs("#table-view table"));
+    id("data-options").classList.add("collapsed");
   }
 
   function nextPage() {
     pageViewing += 1;
     if (id("search-table").value.trim().length > 0) {
-      searchForQuery(pageViewing)
+      let order = id("table-view").classList.contains("sorted");
+      if (order) {
+        searchForQuery(pageViewing, sortingCol, order ? "DESC" : "ASC")
+      } else {
+        searchForQuery(pageViewing)
+      }
+      
     } else {
-      openTableView(id("table-name").value);
+      let order = id("table-view").classList.contains("sorted") ? "DESC" : "ASC";
+      openTableView(id("table-name").value, sortingCol, order);
     }
 
     if (id("page-back").classList.contains("invisible")) {
@@ -542,6 +572,7 @@
     }
 
     responsiveDataViewColumns(qs("#table-view table"));
+    id("data-options").classList.add("collapsed");
   }
 
   async function executeSql() {
@@ -799,9 +830,9 @@
     }
   }
 
-  async function getDataFromTable(table) {
+  async function getDataFromTable(table, orderBy, direction) {
     try {
-      let tableData = await ipc.invoke('view-data', table, pageViewing);
+      let tableData = await ipc.invoke('view-data', table, pageViewing, orderBy, direction);
       if (tableData.type === "err") {
         throw new Error(tableData.error);
       }
@@ -905,12 +936,11 @@
     }
   }
 
-  async function openTableView(table) {
+  async function openTableView(table, orderBy, sortDirection) {
     try {
-      // console.log(violatedRows);
       id("search-table").value = "";
 
-      let tableData = await getDataFromTable(table);
+      let tableData = await getDataFromTable(table, orderBy, sortDirection);
       let tableMeta = await ipc.invoke("get-table-meta", table);
 
       if (!tableMeta.type === "err") {
@@ -920,7 +950,7 @@
       let dataViewTable = document.createElement("table");
       let header = document.createElement("tr");
 
-      ["Select", ...tableData.columns?.map((col) => col.name)].forEach((column) => {
+      ["Select", ...tableData.columns?.map((col) => col.name)].forEach((column, i) => {
         let columnName = document.createElement("th");
         let columnHolder = document.createElement("p");
 
@@ -928,6 +958,19 @@
 
         if (column == tableMeta.pk) {
           columnName.id = "pk";
+        }
+
+        if (i > 0) {
+          columnName.addEventListener("click", () => {
+            sortingCol = column;
+            let sortedOrder = qs("#table-view").classList.contains("sorted") ? "ASC" : "DESC";
+            if (id("search-table").value.trim().length > 0) {
+              searchForQuery(pageViewing, column, sortedOrder)
+            } else {
+              openTableView(id("table-name").value, column, sortedOrder);
+              qs("#table-view").classList.toggle("sorted");
+            }
+          });
         }
         
         columnName.appendChild(columnHolder);
@@ -944,14 +987,17 @@
         tableData.data.forEach((rowData, i) => {
           let row = document.createElement("tr");
           let firstCol = document.createElement("td");
+          let checkboxHolder = document.createElement("div");
           let checkBox = document.createElement("input");
           checkBox.type = "checkbox";
           if (selectedRows.includes(rowData[tableMeta.pk] + "")) {
             checkBox.checked = true;
           }
-          checkBox.addEventListener("click", recordCheck)
+          checkBox.addEventListener("click", recordCheck);
+          checkboxHolder.classList.add("select-check");
+          checkboxHolder.appendChild(checkBox);
   
-          firstCol.appendChild(checkBox);
+          firstCol.appendChild(checkboxHolder);
           row.appendChild(firstCol);
           row.id = rowData[tableMeta.pk];
   
@@ -980,8 +1026,6 @@
 
             cell.appendChild(cellcontainer);
             row.appendChild(cell);
-
-            console.log(violatedRows);
 
             if (violatedRows[table]?.[col]?.includes(rowData[tableMeta.pk])) {
               cellcontainer.classList.add("invalid-row");
@@ -1107,6 +1151,8 @@
       
       viewToOpen.classList.add("active");
       clickedTab.classList.add("active");
+
+      id("data-options").classList.add("collapsed");
     }
   }
 

@@ -87,7 +87,10 @@ const ipc = require('electron').ipcRenderer;
 
     let typeSelect = document.createElement("select");
     typeSelect.addEventListener("change", (e) => {
+      // 
       // change the type
+      let v = e.currentTarget.closest("tr").parentNode.children;
+      console.log(e.closest("table").children[v.length - v.indexOf(e.currentTarget.closest("tr"))]);
       let nameDisplayed = qs("p[class='" + (colName ? colName : `Field${rowNum}`) + "']").querySelector(".col-type");
       nameDisplayed.textContent = e.currentTarget.value;
     })

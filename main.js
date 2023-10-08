@@ -328,6 +328,8 @@ ipcMain.handle("search-table", async (event, ...args) => {
     let columns = args[1];
     let searchquery = args[2];
     let page = args[3] || 0;
+    let sortedCol = args[4];
+    let sortedOrd = args[5];
 
     if (tablename && columns) {
       let sqlquery = `SELECT * FROM \`${tablename}\` WHERE `;
@@ -336,8 +338,13 @@ ipcMain.handle("search-table", async (event, ...args) => {
         sqlquery += `\`${colname}\` LIKE "%${searchquery}%"${i === columns.length - 1 ? "" : " OR\n"}`;
       });
 
+      if (sortedCol) {
+        sqlquery += `ORDER BY \`${sortedCol}\` ${sortedOrd}\n`;
+      }
+
       sqlquery += `LIMIT ${page * OFFSET}, ${OFFSET}`;
 
+      console.log(sqlquery);
       let res = await previewDB.conn.all(sqlquery);
 
       return {
@@ -460,6 +467,7 @@ ipcMain.handle("get-csv-data", async (event, ...args) => {
 ipcMain.handle("csv-select", async (event, ...args) => {
   try {
     let pathSelect = await openCSVDialog();
+    
     if (pathSelect["canceled"]) {
       return {
         "type": "passive",
@@ -1028,6 +1036,8 @@ ipcMain.handle('view-data', async (event, ...args) => {
   try {
     let table = args[0];
     let page = args[1] || 0;
+    let orderBy = args[2];
+    let dir = args[3];
 
     if (!db) {
       throw new Error("There's no database currently open");
@@ -1036,8 +1046,18 @@ ipcMain.handle('view-data', async (event, ...args) => {
     }
 
     // TODO: SQL INJECTION PART 2
-    let columns = await previewDB.conn.all(`SELECT name FROM pragma_table_info("${table}")`); 
-    let tableData = await previewDB.conn.all(`SELECT * FROM \`${table}\` LIMIT ${page * OFFSET}, ${OFFSET}`);
+    let columns = await previewDB.conn.all(`SELECT name FROM pragma_table_info("${table}")`);
+    let query = `SELECT * FROM \`${table}\``; 
+    
+    if (orderBy) {
+      query += ` ORDER BY \`${orderBy}\` ${dir}`;
+    }
+
+    query += ` LIMIT ${page * OFFSET}, ${OFFSET}`;
+
+    console.log(query);
+
+    let tableData = await previewDB.conn.all(query);
 
     return {
       "columns": columns,
@@ -1168,24 +1188,22 @@ ipcMain.handle('open-database', async (event, ...args) => {
 ipcMain.handle('add-database', async () => {
   try {
     let selectedPath = openSaveDialog();
-
-    if (!selectedPath["canceled"]) {
-       
-       
-
-      await fsasync.unlink(selectedPath);
+    if (!selectedPath?.["canceled"]) {
+      try {
+        await fsasync.access(selectedPath)
+        await fsasync.unlink(selectedPath);
+      } catch (err) {
+        // do nothing lol.
+      }
 
       db = await getDBConnection(selectedPath);
       await createPreviewDb(selectedPath);
        
-      
-
       let existing = store.get('recent-db');
-
       if (!existing) {
         store.set('recent-db', [selectedPath]);
       } else {
-        store.set('recent-db', [selectedPath, ...existing]);
+        store.set('recent-db', [...new Set([selectedPath, ...existing])]);
       }
 
       currentDBPath = selectedPath;
@@ -1198,6 +1216,7 @@ ipcMain.handle('add-database', async () => {
       };
     }
   } catch (err) {
+    console.log(err);
     return {
       "type": "err",
       "error": err
@@ -1365,6 +1384,7 @@ const createWindow = async () => {
   win.on("closed", async () => {
     if (db) {
       await db.close();
+      await previewDB.conn.close();
       db = null;
       currentDBPath = null;
       win = null;
@@ -1381,6 +1401,7 @@ app.on('window-all-closed', async () => {
   try {
     if (db) {
       await db.close();
+      await previewDB.conn.close();
     }
     if (process.platform !== 'darwin') app.quit()
   } catch (err) {
@@ -1393,6 +1414,7 @@ app.whenReady().then(async () => {
   try {
     if (db) {
       await db.close()
+      await previewDB.conn.close();
     }
 
     createWindow()

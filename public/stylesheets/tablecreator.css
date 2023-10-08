@@ -163,6 +163,10 @@ tr:nth-of-type(1) th {
   background-color: var(--bg-lighter);
 }
 
+#row-builder tr td:nth-of-type(9) {
+  padding: 0;
+}
+
 input[type="text"],
 select {
   font-size: 1em;
