@@ -421,6 +421,7 @@
 
       if (e.target.textContent.trim().length > 0) {
         let res = await ipc.invoke("add-dataview-changes", table, modifiedColumn.textContent, value, pk, pkValue);
+
         violatedRows = [];
 
         e.target.classList.remove("invalid-row");
@@ -462,7 +463,7 @@
             let popup = document.createElement('div');
             popup.textContent = "Non-unique value in unique column";
             e.target.parentNode.appendChild(popup);
-          } else {
+          } else if (res.error !== "too fast") {
             throw new Error(res.error);
           }
         } else {

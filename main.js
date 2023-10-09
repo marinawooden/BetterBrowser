@@ -171,6 +171,12 @@ ipcMain.handle("add-dataview-changes", async (event, ...args) => {
         "error": "SQLITE_CONSTRAINT",
         "violations": violations
       }
+    } else if (/cannot start/g.test(err.message) || /cannot commit/g.test(err.message)) {
+      return {
+        "type": "err",
+        "detail": err.code,
+        "error": "too fast"
+      }
     } else {
       await previewDB.conn.exec("ROLLBACK;")
       return {
@@ -533,25 +539,42 @@ ipcMain.handle("get-constraints", async () => {
       throw new Error("No table or database currently open!");
     }
 
-    let query = `SELECT sql FROM sqlite_master WHERE type="table" and name=?`;
-    let sql = await db.get(query, editingTable);
-    let constraints = sql.sql.split("\n")
-    .filter((sentence) => sentence[0] === '"')
-    .map((col) => {
-      let nn = /NOT NULL/.test(col)
-      let def = col.match(/(?<=DEFAULT ").*(?=")/)
-      let u = /UNIQUE/.test(col)
+    let cols = await db.all(`PRAGMA table_info(${editingTable})`);
+    let createStmt = await db.get(`SELECT sql FROM sqlite_master WHERE tbl_name = ? AND type = 'table'`, editingTable)
 
+
+    cols = cols.map((col) => {
+      let replace = `${col.name}.*UNIQUE`;
       return {
-        "nn": nn,
-        "default": def ? def[0] : def,
-        "u": u
+        "nn": col.notnull,
+        "default": col.dflt_value,
+        "u": new RegExp(replace,"mg").test(createStmt.sql)
       }
     });
 
+    // let constraints = sql.sql.split("\n")
+
+    // console.log(constraints);
+
+    // constraints = constraints.filter((sentence) => /^["']?\w+ .*[^\)\()]$/mg.test(sentence.trim()))
+
+    // console.log(constraints)
+
+    // constraints = constraints.map((col) => {
+    //   let nn = /NOT NULL/.test(col)
+    //   let def = col.match(/(?<=DEFAULT ").*(?=")/)
+    //   let u = /UNIQUE/.test(col)
+
+    //   return {
+    //     "nn": nn,
+    //     "default": def ? def[0] : def,
+    //     "u": u
+    //   }
+    // });
+
     return {
       "type": "success",
-      "results": constraints
+      "results": cols
     }
   } catch (err) {
     return {
@@ -838,10 +861,30 @@ ipcMain.handle('add-empty-row', async (event, ...args) => {
     }
 
     let table = args[0];
+
+    const DEFAULTS = {
+      "INTEGER": -1,
+      "REAL": -1.0,
+      "TEXT": "-",
+      "BLOB": "-",
+    }
+
+    let colNames = [];
+    let defValues = (await previewDB.conn.all(`PRAGMA table_info("${table}")`)).map((col) => {
+      colNames.push(col.name)
+      console.log(col);
+      return col.dflt_value ? col.dflt_value : col.notnull === 1 ? DEFAULTS[col.type] || "'-'" : 'null'
+    });
+
+    console.log(defValues)
+    console.log(`INSERT INTO ${table} (${colNames}) VALUES (${defValues.join(', ')})`);
+
     await previewDB.conn.exec("BEGIN TRANSACTION;")
     let pk = (await db.all(`PRAGMA table_info("${table}")`)).find((col) => col.pk === 1).name;
-    let res = await previewDB.conn.run(`INSERT INTO ${table} DEFAULT VALUES`);
+    let res = await previewDB.conn.run(`INSERT INTO ${table} (${colNames}) VALUES (${defValues.join(', ')})`);
     let lastRecord = await previewDB.conn.get(`SELECT * FROM ${table} WHERE ${pk} = ?`, res.lastID);
+
+
     await previewDB.conn.exec("COMMIT;");
     
     
