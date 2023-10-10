@@ -105,7 +105,6 @@
         changesPopup(false);
       } else {
         let newColNames = [...qsa(".col-name")].map((col) => `"${col.textContent}"`);
-
         let defaults = [...qsa(".def")].map((def) => def.value);
         
         let qry = await ipc.invoke("update-table", creationStmt(), id("table-name").value, newColNames.reverse(), defaults);
@@ -147,8 +146,6 @@
       let query = `
         ${columnNames},${foreignKeys.length > 0 ? foreignKeys + "," : ""}${primaryKey})
       `.trim();
-
-      console.log(query);
 
       return query;
     } catch (err) {
@@ -233,11 +230,9 @@
       let constraints = await getConstraints();
       let foreignKeys = await getForeignKeys();
 
-      console.log(foreignKeys)
-
       id("table-name").value = meta.name;
 
-      buildColumnOptions(columnInfo, constraints["results"], foreignKeys["results"]);
+      buildColumnOptions(columnInfo, constraints["results"], foreignKeys["results"], meta.isAutoincrement);
       responsiveDataViewColumns(qs("table"));
     } catch (err) {
       handleError(err);
@@ -249,11 +244,11 @@
    * @param {Object} columns - stores information about the columns
    * in a table
    */
-  function buildColumnOptions(columns, constraints, foreignKeys) {
+  function buildColumnOptions(columns, constraints, foreignKeys, isAutoincrement) {
     buildPkSelection(columns);
 
     columns.columns.forEach((column, i) => {
-      buildRow(false, constraints[i], columns.types[i], column, columns.pk === column, columns.isAutoincrement, foreignKeys[column]);
+      buildRow(false, constraints[i], columns.types[i], column, columns.pk === column, isAutoincrement && columns.pk === column, foreignKeys[column]);
     })
   }
 
@@ -264,7 +259,6 @@
    * in a table
    */
   function buildPkSelection(columns) {
-    console.log(columns);
     let colnames = columns.columns;
     let pk = columns.pk;
 
@@ -317,6 +311,11 @@
 
       typeDropdown.appendChild(optn);
     });
+
+    if (!SQLITE_TYPES.includes(colType)) {
+      typeDropdown.querySelector("option[value='BLOB']").selected = true;
+    }
+
     typeHolder.appendChild(typeDropdown);
 
     let defaultHolder = document.createElement("td");
@@ -325,7 +324,9 @@
     defaultInput.name = `row-${qsa("#row-builder tr").length}-default`;
     defaultInput.type = "text";
     defaultHolder.appendChild(defaultInput);
-    defaultInput.value = constraints?.default || "";
+    defaultInput.value = constraints?.default?.replace(/['"]+/g, '') || "";
+
+    console.log(constraints.default);
 
     defaultInput.addEventListener("input", () => {
       hasChanges = true
@@ -405,7 +406,6 @@
       }
 
       let groups = Object.keys(res.results);
-      console.log(groups);
       groups.forEach((group) => {
         let optgroup = document.createElement("optgroup");
         optgroup.label = group;
@@ -413,9 +413,6 @@
           let opt = document.createElement("option");
           opt.value = `${group}.${val}`;
           opt.textContent = val;
-
-          console.log(opt.value);
-          console.log(foreignKey);
 
           if (opt.value === foreignKey) {
             opt.selected = true;

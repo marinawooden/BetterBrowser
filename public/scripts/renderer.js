@@ -232,9 +232,6 @@
     let tableWidth = table?.parentNode?.offsetWidth - 300;
     let numColumns = table?.querySelectorAll("th").length - 1;
 
-    console.log(table?.parentNode?.offsetWidth);
-    console.log(numColumns);
-
     let content = table?.querySelectorAll("p");
 
     if (content) {
@@ -402,6 +399,14 @@
         row.appendChild(cell);
       });
 
+      console.log(row);
+      console.log(qs("#table-view tr"));
+
+      if (qsa("#table-view tr").length === 11) {
+        qs("#table-view tr:last-of-type").remove();
+        id("page-next").classList.remove("invisible");
+      }
+      
       insertAfter(row, qs("#table-view tr"));
       responsiveDataViewColumns();
       id("data-options").classList.add("collapsed");
@@ -419,10 +424,10 @@
       let pkValue = e.target.closest('tr').id;
       let modifiedColumn = qs("#table-view table tr").children[[...e.target.closest("tr").children].indexOf(e.target.parentNode)];
 
+      violatedRows = [];
+
       if (e.target.textContent.trim().length > 0) {
         let res = await ipc.invoke("add-dataview-changes", table, modifiedColumn.textContent, value, pk, pkValue);
-
-        violatedRows = [];
 
         e.target.classList.remove("invalid-row");
         e.target.parentNode.querySelector("div")?.remove();
@@ -440,6 +445,7 @@
             
             res.violations.forEach((violation) => {
               // There's has to be gooder way
+              console.log(violation);
               if (!violatedRows[violation.table]) {
                 violatedRows[violation.table] = [];
               }
@@ -451,13 +457,16 @@
               violatedRows[violation.table][violation.from].push(violation.rowid);
             });
 
-            if (violatedIds.includes(parseInt(pkValue))) {
-              e.target.classList.add('invalid-row')
-              let popup = document.createElement('div');
-              popup.textContent = "Invalid foreign key";
+            // bad condition - if violatedIds is pkValue and also e.target.node is the right column
+            // if (violatedIds.includes(parseInt(pkValue))) {
+            //   e.target.classList.add('invalid-row')
+            //   let popup = document.createElement('div');
+            //   popup.textContent = "Invalid foreign key";
 
-              e.target.parentNode.appendChild(popup);
-            }
+            //   e.target.parentNode.appendChild(popup);
+            // }
+
+            highlightInvalidRows();
           } else if (/UNIQUE/g.test(res.error.message)) {
             e.target.classList.add('invalid-row');
             let popup = document.createElement('div');
@@ -478,6 +487,10 @@
     }
   }
 
+  function highlightInvalidRows() {
+    // look through each in violatedRows[table] and add there
+  }
+
   async function removeRows() {
     try {
       let activeTable = id("table-name").value;
@@ -496,7 +509,10 @@
       }
 
       id("data-options").classList.add("collapsed");
-      await openTableView(activeTable);
+      if (rowIds.length > 10) {
+        await openTableView(activeTable);
+      }
+      
       rows.forEach((row) => {
         row.closest("tr").remove();
       });
@@ -1154,6 +1170,10 @@
       clickedTab.classList.add("active");
 
       id("data-options").classList.add("collapsed");
+      console.log(idToOpen);
+      if (idToOpen === "viewer") {
+        responsiveDataViewColumns(qs("#table-view table"));
+      }
     }
   }
 

@@ -24,6 +24,7 @@ let tableEditor;
 let editingTable;
 let csvUpload;
 let csvPath;
+let hasUnsavedChanges = false;
 
 const openTableCreator = () => {
   tableCreator = new BrowserWindow({
@@ -127,7 +128,6 @@ ipcMain.handle("add-new-rows", async (event, ...args) => {
  */
 ipcMain.handle("add-dataview-changes", async (event, ...args) => {
   try {
-     
     let table = args[0];
     let modifiedColumn = args[1];
     let value = args[2];
@@ -147,6 +147,7 @@ ipcMain.handle("add-dataview-changes", async (event, ...args) => {
     }
 
     await previewDB.conn.exec(`COMMIT;`);
+    hasUnsavedChanges = true;
 
     return {
       "type": "success"
@@ -207,6 +208,8 @@ ipcMain.handle("commit-dataview-changes", async (event, ...args) => {
     await fsasync.copyFile(previewDB.location, currentDBPath);
     await db.close();
     db = await getDBConnection(currentDBPath);
+
+    hasUnsavedChanges = false;
 
     return {
       "type": "success"
@@ -634,6 +637,8 @@ ipcMain.handle('update-table', async (event, ...args) => {
     let newColNames = args[2];
     let defaults = args[3];
 
+    console.log(creationStmt);
+
     if (!creationStmt || !newName || !newColNames || !defaults) {
       throw new Error("Missing required arguments");
     }
@@ -869,12 +874,18 @@ ipcMain.handle('add-empty-row', async (event, ...args) => {
       "BLOB": "-",
     }
 
+    let isAutoincrement = await db.get("SELECT * FROM sqlite_master WHERE type = 'table' AND name = ? AND sql LIKE '%AUTOINCREMENT%'", table);
     let colNames = [];
-    let defValues = (await previewDB.conn.all(`PRAGMA table_info("${table}")`)).map((col) => {
+    let defValues = await Promise.all((await previewDB.conn.all(`PRAGMA table_info("${table}")`)).map(async (col) => {
       colNames.push(col.name)
-      console.log(col);
+
+      if (col.pk === 1 && isAutoincrement) {
+        let lastRecord = await previewDB.conn.get(`SELECT COUNT(*) as count FROM ${table}`);
+        // console.log(lastRecord);
+        return lastRecord.count + 2;
+      }
       return col.dflt_value ? col.dflt_value : col.notnull === 1 ? DEFAULTS[col.type] || "'-'" : 'null'
-    });
+    }));
 
     console.log(defValues)
     console.log(`INSERT INTO ${table} (${colNames}) VALUES (${defValues.join(', ')})`);
@@ -1425,6 +1436,10 @@ const createWindow = async () => {
   })
 
   win.on("closed", async () => {
+    if (hasUnsavedChanges) {
+      dialog.showErrorBox('Unsaved Changes', 'Your unsaved changes will be lost') 
+    }
+
     if (db) {
       await db.close();
       await previewDB.conn.close();
