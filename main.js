@@ -169,22 +169,40 @@ ipcMain.handle("add-dataview-changes", async (event, ...args) => {
 
       return {
         "type": "err",
-        "error": "SQLITE_CONSTRAINT",
+        "error": err,
+        "detail": "FOREIGN_KEY",
         "violations": violations
       }
     } else if (/cannot start/g.test(err.message) || /cannot commit/g.test(err.message)) {
       return {
         "type": "err",
         "detail": err.code,
-        "error": "too fast"
+        "error": "too fast",
       }
     } else {
       await previewDB.conn.exec("ROLLBACK;")
-      return {
-        "type": "err",
-        "detail": err.code,
-        "error": err
+      console.log(err.message)
+      const ERRORCODES = {
+        "UNIQUE": /UNIQUE/mig,
+        "TYPE_MISMATCH": /Type Mismatch/mig
       }
+
+      const errorObj = {
+        "type": "err",
+        "error": err,
+      }
+
+      Object.keys(ERRORCODES).forEach((obj) => {
+        if (ERRORCODES[obj].test(err.message)) {
+          errorObj.detail = obj
+        }
+      });
+
+      if (!errorObj.detail) {
+        errorObj.detail === "UNKNOWN"
+      }
+
+      return errorObj
     }
   }
 });

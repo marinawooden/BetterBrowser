@@ -7,6 +7,7 @@
   let violatedRows = [];
   let pageViewing = 0;
   let sortingCol;
+  let prevError;
 
   window.addEventListener("load", init);
 
@@ -399,9 +400,6 @@
         row.appendChild(cell);
       });
 
-      console.log(row);
-      console.log(qs("#table-view tr"));
-
       if (qsa("#table-view tr").length === 11) {
         qs("#table-view tr:last-of-type").remove();
         id("page-next").classList.remove("invisible");
@@ -424,72 +422,138 @@
       let pkValue = e.target.closest('tr').id;
       let modifiedColumn = qs("#table-view table tr").children[[...e.target.closest("tr").children].indexOf(e.target.parentNode)];
 
-      violatedRows = [];
-
       if (e.target.textContent.trim().length > 0) {
         let res = await ipc.invoke("add-dataview-changes", table, modifiedColumn.textContent, value, pk, pkValue);
-
-        e.target.classList.remove("invalid-row");
         e.target.parentNode.querySelector("div")?.remove();
 
-        qsa(".invalid-row").forEach((row) => {
-          row.classList.remove("invalid-row");
-          row.parentNode.querySelector("div").remove();
-        })
+        let from = [...qs("#table-view tr").children][[...e.target.closest('tr').children].indexOf(e.target.parentNode)].textContent
+        let tableName = id("table-name").value;
+        let rowid = e.target.closest("tr").id;
 
-        if (res.type === "err") {
-          if (res.error === "SQLITE_CONSTRAINT") {
-            let violatedIds = res.violations
-              .filter((violation) => violation.table === table)
-              .map((violation) => violation.rowid);
-            
-            res.violations.forEach((violation) => {
-              // There's has to be gooder way
-              console.log(violation);
-              if (!violatedRows[violation.table]) {
-                violatedRows[violation.table] = [];
-              }
-
-              if (!violatedRows[violation.table][violation.from]) {
-                violatedRows[violation.table][violation.from] = [];
-              }
-
-              violatedRows[violation.table][violation.from].push(violation.rowid);
-            });
-
-            // bad condition - if violatedIds is pkValue and also e.target.node is the right column
-            // if (violatedIds.includes(parseInt(pkValue))) {
-            //   e.target.classList.add('invalid-row')
-            //   let popup = document.createElement('div');
-            //   popup.textContent = "Invalid foreign key";
-
-            //   e.target.parentNode.appendChild(popup);
-            // }
-
-            highlightInvalidRows();
-          } else if (/UNIQUE/g.test(res.error.message)) {
-            e.target.classList.add('invalid-row');
-            let popup = document.createElement('div');
-            popup.textContent = "Non-unique value in unique column";
-            e.target.parentNode.appendChild(popup);
-          } else if (res.error !== "too fast") {
-            throw new Error(res.error);
+        // PROBLEM: IF there's an error in some other column, the commented
+        // implementation will highlight the current column as well- even if
+        // it's not the one causing the issue
+        if (res.type === "err" && res.error !== "too fast") {
+          const MSG_LOOKUP = {
+            "FOREIGN_KEY": "Invalid foreign key",
+            "UNIQUE": "Non unique value in unique column"
           }
+
+          let violations = res.violations || [{
+            "from": from,
+            "table": tableName,
+            "rowid": rowid,
+          }];
+
+          // if it's a fk violation- find all with the same violation and if they're not in res.violations delete them!
+
+          for (let i = 0; i < violations.length; i++) {
+            let violation = violations[i];
+            let key = `${violation.table}.${violation.from}.${violation.rowid}`;
+
+            violatedRows[key] = res.detail;
+
+            let idIndex = [...qs("#table-view table tr").children].map((e) => e.textContent).indexOf(violation.from);
+            let violatedP = qs(`[id='${violation.rowid}']`).children[idIndex].querySelector("p");
+            if (!violatedP.classList.contains("invalid-row")) {
+              violatedP.classList.add("invalid-row");
+            
+              let msg = document.createElement("div");
+              msg.textContent = MSG_LOOKUP[res.detail] || "Unknown Error";
+              violatedP.parentNode.appendChild(msg);
+            }
+          }
+
+          console.log(prevError);
         } else {
           if (modifiedColumn.id === "pk") {
             e.target.closest("tr").id = value;
           }
+          // e.target.classList.remove("invalid-row");
           qs("a[href='#viewer']").classList.add("unsaved");
         }
+
+        // if a violation existing in the record
+        let key = `${table}.${from}.${rowid}`;
+        console.log(key);
+        if (violatedRows?.[key]) {
+          console.log(violatedRows[key])
+          // a violation exists, now does the current error match the previous violation?
+          if (res.type !== "err" || res.detail !== violatedRows[key]) {
+            // no?  Okay - we can remove the class!
+            e.target.classList.remove("invalid-row");
+            console.log(e.target);
+            delete violatedRows[key]
+          }
+        }
+
+        // if (res.detail !== prevError || res.type !== "err") {
+        //   let rowNameTest = new RegExp(`\.${rowid}$`);
+        //   let currRowViolations = [...Object.keys(violatedRows)].filter((row) => {
+        //     return rowNameTest.test(row)
+        //   });
+
+        //   for (let i = 0; i < currRowViolations.length; i++) {
+        //     for (const error of violatedRows[currRowViolations[i]]) {
+        //       if (error === prevError) {
+        //         violatedRows[currRowViolations[i]].delete(error);
+
+        //         if (violatedRows[currRowViolations[i]].size === 0) {
+        //           let row = currRowViolations[i].split(".")[1];
+        //           let id = currRowViolations[i].split(".")[2];
+        //           let idIndex = [...qs("#table-view table tr").children].map((e) => e.textContent).indexOf(row);
+
+        //           qs(`[id='${id}']`).children[idIndex].querySelector("p").classList.remove("invalid-row");
+        //         }
+        //       }
+        //     }
+        //   }
+
+        //   prevError = res.detail;
+        // }
+
+        console.log(violatedRows);
       }
     } catch (err) {
       handleError(err);
     }
   }
 
-  function highlightInvalidRows() {
-    // look through each in violatedRows[table] and add there
+  function removeFromArray(arr, val) {
+    const index = arr.indexOf(val);
+    if (index > -1) { // only splice array when item is found
+      arr.splice(index, 1); // 2nd parameter means remove one item only
+    }
+
+    return arr
   }
+
+  // function highlightInvalidRows() {
+  //   const errors = {
+  //     "FOREIGN_KEY": "Invalid foreign key",
+  //     "UNIQUE": "Non-unique value in unique column",
+  //     "TYPE_MISMATCH": "This isn't the expected type for this column"
+  //   }
+  //   // look through each in violatedRows[table] and add there
+  //   let currTableViolations = violatedRows[qs("#table-name").value];
+  //   Object.keys(currTableViolations).forEach((colName) => {
+  //     let violationsInCol = currTableViolations[colName];
+  //     let violatingIds = violationsInCol.map((e) => e[0])
+  //     let colElem = [...qsa("#table-view tr th")].find((e) => e.textContent === colName);
+  //     let indexOfId = [...colElem.parentNode.children].indexOf(colElem)
+  //     // let indexOfId = [...Object.keys(currTableViolations)].indexOf(colName) + 1;
+  //     let violatingRowElems = qsa('[id="' + violatingIds.join('"], [id="') + '"]')
+
+  //     violatingRowElems.forEach((rowElem, i) => {
+  //       rowElem.children[indexOfId].querySelector("p").classList.add("invalid-row");
+  //       let errmsg = violationsInCol[i][1];
+  //       let msg = document.createElement("div");
+  //       msg.textContent = errors[errmsg] || "Unknown error";
+  //       rowElem.children[indexOfId].appendChild(msg);
+  //       rowElem.children[indexOfId].dataset.erroredfor = errmsg;
+  //     });
+  //   });
+  // }
 
   async function removeRows() {
     try {
@@ -550,7 +614,6 @@
 
       let order = id("table-view").classList.contains("sorted");
 
-      console.log(order);
       if (order) {
         searchForQuery(pageViewing, sortingCol, order ? "DESC" : "ASC")
       } else {
@@ -1044,13 +1107,13 @@
             cell.appendChild(cellcontainer);
             row.appendChild(cell);
 
-            if (violatedRows[table]?.[col]?.includes(rowData[tableMeta.pk])) {
-              cellcontainer.classList.add("invalid-row");
-              let popup = document.createElement('div');
-              popup.textContent = "Invalid foreign key";
+            // if (violatedRows[table]?.[col]?.includes(rowData[tableMeta.pk])) {
+            //   cellcontainer.classList.add("invalid-row");
+            //   let popup = document.createElement('div');
+            //   popup.textContent = "Invalid foreign key";
 
-              cell.appendChild(popup);
-            }
+            //   cell.appendChild(popup);
+            // }
           });
           dataViewTable.appendChild(row);
         });
@@ -1170,7 +1233,6 @@
       clickedTab.classList.add("active");
 
       id("data-options").classList.add("collapsed");
-      console.log(idToOpen);
       if (idToOpen === "viewer") {
         responsiveDataViewColumns(qs("#table-view table"));
       }
