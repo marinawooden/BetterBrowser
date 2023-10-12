@@ -123,6 +123,34 @@ ipcMain.handle("add-new-rows", async (event, ...args) => {
   }
 });
 
+ipcMain.handle("get-fk-violations", async (event, ...args) => {
+  try {
+    if (!args[0]) {
+      throw new Error("Please provide a table!")
+    }
+
+    let violations = await previewDB.conn.all("PRAGMA foreign_key_check");
+    let foreignKeyNames = await previewDB.conn.all(`PRAGMA foreign_key_list('${args[0]}')`);
+    // console.log(violations);
+    // console.log(foreignKeyNames);
+
+    return {
+      "type": "success",
+      "violations": violations.map((viol) => {
+        return {
+          ...viol,
+          "col": (foreignKeyNames.find((elem) => elem.id === viol.fkid && elem.table === viol.parent))?.from
+        }
+      }).filter((elem) => elem.table === args[0])
+    };
+  } catch (err) {
+    return {
+      "type": "err",
+      "error": err
+    }
+  }
+})
+
 /**
  * Updates the staging database
  */
@@ -155,7 +183,7 @@ ipcMain.handle("add-dataview-changes", async (event, ...args) => {
   } catch (err) {
     if (err.message === "fk") {
       let violations = await previewDB.conn.all("PRAGMA foreign_key_check");
-      let foreignKeys = await previewDB.conn.all("PRAGMA foreign_key_list('people')");
+      let foreignKeys = await previewDB.conn.all(`PRAGMA foreign_key_list('${args[0]}')`);
 
       violations = violations.map((violation) => {
         return {
@@ -181,7 +209,6 @@ ipcMain.handle("add-dataview-changes", async (event, ...args) => {
       }
     } else {
       await previewDB.conn.exec("ROLLBACK;")
-      console.log(err.message)
       const ERRORCODES = {
         "UNIQUE": /UNIQUE/mig,
         "TYPE_MISMATCH": /Type Mismatch/mig
@@ -522,6 +549,7 @@ ipcMain.handle("get-foreign-keys", async (event, ...args) => {
     }
 
     let query = `SELECT sql FROM sqlite_master WHERE type="table" and name=?`;
+
     let sql = await db.get(query, editingTable);
     let foreignKeys = {};
     sql.sql.split("\n")
@@ -913,16 +941,30 @@ ipcMain.handle('add-empty-row', async (event, ...args) => {
     let res = await previewDB.conn.run(`INSERT INTO ${table} (${colNames}) VALUES (${defValues.join(', ')})`);
     let lastRecord = await previewDB.conn.get(`SELECT * FROM ${table} WHERE ${pk} = ?`, res.lastID);
 
-
     await previewDB.conn.exec("COMMIT;");
     
+    // get foreign key conflicts
+    let violations = await previewDB.conn.all("PRAGMA foreign_key_check");
+    let foreignKeyNames = await previewDB.conn.all(`PRAGMA foreign_key_list('${table}')`);
+
+    let conflicts = violations.map((viol) => {
+      return {
+        ...viol,
+        "col": (foreignKeyNames.find((elem) => elem.id === viol.fkid && elem.table === viol.parent))?.from
+      }
+    }).filter((elem) => elem.table === table && elem.rowid === res.lastID)
+    // let conflicts = getForeignKeyViolations(table);
+
+    console.log(conflicts);
     
     return {
       "type": "success",
       "result": lastRecord,
-      "pk": pk
+      "pk": pk,
+      "fkconflicts": conflicts
     }
   } catch (err) {
+    console.log(err);
     await previewDB.conn.exec("ROLLBACK;");
     return {
       "type": "err",

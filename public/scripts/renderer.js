@@ -2,6 +2,12 @@
 (function() {
   const ipc = require('electron').ipcRenderer;
   const { webFrame } = require('electron');
+
+  const MSG_LOOKUP = {
+    "FOREIGN_KEY": "Invalid foreign key",
+    "UNIQUE": "Non unique value in unique column",
+    "TYPE_MISMATCH": "Unexpected data type"
+  }
   
   let selectedRows = [];
   let violatedRows = [];
@@ -124,16 +130,6 @@
 
       toRemove.remove();
 
-      // if (qs("#database-structure p")?.textContent === toRemoveName) {
-      //   id("database-structure").remove();
-      //   let noDatabaseOpenText = document.createElement("p");
-      //   noDatabaseOpenText.textContent = "No database is currently open, please create one or open one from a file";
-
-      //   id("table-schema-view").appendChild(noDatabaseOpenText);
-      //   id("table-name").innerHTML = "";
-      //   qs("#table-view table").remove();
-      // }
-
       if (!qs("#recent-connections *")) {
         let noRecentConnection = document.createElement("p");
         noRecentConnection.textContent = "Databases you connect to will be shown here";
@@ -172,7 +168,6 @@
     qsa("#table-view table tr:not(:first-of-type)").forEach((row) => row.remove());
 
     results.forEach((result) => {
-      // TODO: This is redundant- should be the same as AddNewRow
       let row = document.createElement("tr");
       let pk = id("pk").textContent;
 
@@ -188,7 +183,7 @@
       checkbox.addEventListener("click", recordCheck)
       row.append(checkboxCol);
       
-      [...Object.keys(result)].forEach((col) => {
+      [...Object.keys(result)].forEach((col, i) => {
         let content = document.createElement("td");
         let contentHolder = document.createElement("p")
 
@@ -378,6 +373,10 @@
 
       let row = document.createElement("tr");
       row.id = res.result[res.pk];
+      let fkviolations = res.fkconflicts?.map((e) => e.rowid + e.col);
+
+      console.log(res);
+      console.log(fkviolations);
 
       ["", ...Object.keys(res.result)].forEach((col, i) => {
         let cell = document.createElement("td");
@@ -394,8 +393,12 @@
           content.addEventListener("input", saveDataViewerInput);
           content.textContent = res.result[col];
           content.contentEditable = true;
+          
+          if (fkviolations?.includes(res.result[res.pk] + col)) {
+            content.classList.add("invalid-row");
+          }
 
-          cell.appendChild(content);
+          cell.prepend(content);
         }
         row.appendChild(cell);
       });
@@ -426,93 +429,36 @@
         let res = await ipc.invoke("add-dataview-changes", table, modifiedColumn.textContent, value, pk, pkValue);
         e.target.parentNode.querySelector("div")?.remove();
 
-        let from = [...qs("#table-view tr").children][[...e.target.closest('tr').children].indexOf(e.target.parentNode)].textContent
-        let tableName = id("table-name").value;
-        let rowid = e.target.closest("tr").id;
-
         // PROBLEM: IF there's an error in some other column, the commented
         // implementation will highlight the current column as well- even if
         // it's not the one causing the issue
         if (res.type === "err" && res.error !== "too fast") {
-          const MSG_LOOKUP = {
-            "FOREIGN_KEY": "Invalid foreign key",
-            "UNIQUE": "Non unique value in unique column"
-          }
-
-          let violations = res.violations || [{
-            "from": from,
-            "table": tableName,
-            "rowid": rowid,
-          }];
-
-          // if it's a fk violation- find all with the same violation and if they're not in res.violations delete them!
-
-          for (let i = 0; i < violations.length; i++) {
-            let violation = violations[i];
-            let key = `${violation.table}.${violation.from}.${violation.rowid}`;
-
-            violatedRows[key] = res.detail;
-
-            let idIndex = [...qs("#table-view table tr").children].map((e) => e.textContent).indexOf(violation.from);
-            let violatedP = qs(`[id='${violation.rowid}']`).children[idIndex].querySelector("p");
-            if (!violatedP.classList.contains("invalid-row")) {
-              violatedP.classList.add("invalid-row");
-            
-              let msg = document.createElement("div");
-              msg.textContent = MSG_LOOKUP[res.detail] || "Unknown Error";
-              violatedP.parentNode.appendChild(msg);
+          let violatingIds = res.violations?.map((row) => row.rowid + row.from);
+          if (res.detail === "FOREIGN_KEY") {
+            let colName = qs("#table-view tr").children[[...e.target.closest("tr").children].indexOf(e.target.parentNode)].textContent;
+            console.log(e.target.closest("tr").id + colName);
+            if (violatingIds.includes(e.target.closest("tr").id + colName)) {
+              // foreign key violation
+              e.target.classList.add("invalid-row");
+              let message = document.createElement("div");
+              message.textContent = MSG_LOOKUP[res.detail];
+              e.target.parentNode.appendChild(message);
+            } else {
+              e.target.classList.remove("invalid-row");
             }
+          } else {
+            e.target.classList.add("invalid-row");
+            let message = document.createElement("div");
+            message.textContent = MSG_LOOKUP[res.detail];
+            e.target.parentNode.appendChild(message);
           }
-
-          console.log(prevError);
         } else {
           if (modifiedColumn.id === "pk") {
             e.target.closest("tr").id = value;
           }
-          // e.target.classList.remove("invalid-row");
+          e.target.classList.remove("invalid-row")
           qs("a[href='#viewer']").classList.add("unsaved");
         }
-
-        // if a violation existing in the record
-        let key = `${table}.${from}.${rowid}`;
-        console.log(key);
-        if (violatedRows?.[key]) {
-          console.log(violatedRows[key])
-          // a violation exists, now does the current error match the previous violation?
-          if (res.type !== "err" || res.detail !== violatedRows[key]) {
-            // no?  Okay - we can remove the class!
-            e.target.classList.remove("invalid-row");
-            console.log(e.target);
-            delete violatedRows[key]
-          }
-        }
-
-        // if (res.detail !== prevError || res.type !== "err") {
-        //   let rowNameTest = new RegExp(`\.${rowid}$`);
-        //   let currRowViolations = [...Object.keys(violatedRows)].filter((row) => {
-        //     return rowNameTest.test(row)
-        //   });
-
-        //   for (let i = 0; i < currRowViolations.length; i++) {
-        //     for (const error of violatedRows[currRowViolations[i]]) {
-        //       if (error === prevError) {
-        //         violatedRows[currRowViolations[i]].delete(error);
-
-        //         if (violatedRows[currRowViolations[i]].size === 0) {
-        //           let row = currRowViolations[i].split(".")[1];
-        //           let id = currRowViolations[i].split(".")[2];
-        //           let idIndex = [...qs("#table-view table tr").children].map((e) => e.textContent).indexOf(row);
-
-        //           qs(`[id='${id}']`).children[idIndex].querySelector("p").classList.remove("invalid-row");
-        //         }
-        //       }
-        //     }
-        //   }
-
-        //   prevError = res.detail;
-        // }
-
-        console.log(violatedRows);
       }
     } catch (err) {
       handleError(err);
@@ -527,33 +473,6 @@
 
     return arr
   }
-
-  // function highlightInvalidRows() {
-  //   const errors = {
-  //     "FOREIGN_KEY": "Invalid foreign key",
-  //     "UNIQUE": "Non-unique value in unique column",
-  //     "TYPE_MISMATCH": "This isn't the expected type for this column"
-  //   }
-  //   // look through each in violatedRows[table] and add there
-  //   let currTableViolations = violatedRows[qs("#table-name").value];
-  //   Object.keys(currTableViolations).forEach((colName) => {
-  //     let violationsInCol = currTableViolations[colName];
-  //     let violatingIds = violationsInCol.map((e) => e[0])
-  //     let colElem = [...qsa("#table-view tr th")].find((e) => e.textContent === colName);
-  //     let indexOfId = [...colElem.parentNode.children].indexOf(colElem)
-  //     // let indexOfId = [...Object.keys(currTableViolations)].indexOf(colName) + 1;
-  //     let violatingRowElems = qsa('[id="' + violatingIds.join('"], [id="') + '"]')
-
-  //     violatingRowElems.forEach((rowElem, i) => {
-  //       rowElem.children[indexOfId].querySelector("p").classList.add("invalid-row");
-  //       let errmsg = violationsInCol[i][1];
-  //       let msg = document.createElement("div");
-  //       msg.textContent = errors[errmsg] || "Unknown error";
-  //       rowElem.children[indexOfId].appendChild(msg);
-  //       rowElem.children[indexOfId].dataset.erroredfor = errmsg;
-  //     });
-  //   });
-  // }
 
   async function removeRows() {
     try {
@@ -1016,12 +935,26 @@
     }
   }
 
+  async function getForeignKeyViolations(table) {
+    let res = await ipc.invoke("get-fk-violations", table);
+
+    if (res.type === "err") {
+      throw new Error(res.error);
+    }
+    
+    return res.violations.map((viol) => viol.rowid + viol.col);
+  }
+
   async function openTableView(table, orderBy, sortDirection) {
     try {
       id("search-table").value = "";
 
       let tableData = await getDataFromTable(table, orderBy, sortDirection);
+      // todo: use this info to apply the invalid row class to new stuff
+      let foreignKeyViolations = await getForeignKeyViolations(table);
       let tableMeta = await ipc.invoke("get-table-meta", table);
+
+      console.log(foreignKeyViolations);
 
       if (!tableMeta.type === "err") {
         throw new Error(tableMeta.error);
@@ -1092,6 +1025,13 @@
             // cellcontainer.style.maxWidth = `${tableWidth / numColumns}px`;
             cellcontainer.style.maxWidth = `${tableWidth / numColumns}px`;
 
+            if (foreignKeyViolations.includes(rowData[tableMeta.pk] + col)) {
+              cellcontainer.classList.add("invalid-row");
+              let errormsg = document.createElement("div");
+              errormsg.textContent = MSG_LOOKUP["FOREIGN_KEY"];
+              cell.appendChild(errormsg);
+            }
+
             cellcontainer.addEventListener("input", saveDataViewerInput);
 
             cellcontainer.addEventListener("click", function() {
@@ -1104,22 +1044,13 @@
               colHeader.classList.remove("w-100");
             });
 
-            cell.appendChild(cellcontainer);
+            cell.prepend(cellcontainer);
             row.appendChild(cell);
-
-            // if (violatedRows[table]?.[col]?.includes(rowData[tableMeta.pk])) {
-            //   cellcontainer.classList.add("invalid-row");
-            //   let popup = document.createElement('div');
-            //   popup.textContent = "Invalid foreign key";
-
-            //   cell.appendChild(popup);
-            // }
           });
           dataViewTable.appendChild(row);
         });
         
         id("table-view").appendChild(dataViewTable);
-        // responsiveDataViewColumns(qs("#table-view table"));
 
         if (tableData.data.length % 10 !== 0) {
           id("page-next").classList.add("invisible");
@@ -1138,7 +1069,6 @@
       }
 
       responsiveDataViewColumns(qs("#table-view table"));
-
     } catch (err) {
       console.error(err);
       alert(err);
