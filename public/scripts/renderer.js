@@ -929,12 +929,45 @@
     qsa(".current-db-name").forEach((node) => node.textContent = filename)
   }
 
-  function promptForClear() {
-    let clearConfirm = confirm("Are you sure you want to clear your recent database connections?");
-
+  async function promptForClear() {
+    let clearConfirm = await betterConfirm("Are you sure you want to clear your recent database connections?");
     if (clearConfirm) {
       clearConnections();
     }
+
+    id("there-she-goes").remove();
+  }
+
+  function betterConfirm(text) {
+    let confirmOption = document.createElement("dialog");
+    let confirmText = document.createElement("p");
+    confirmText.textContent = text;
+
+    confirmOption.id = "there-she-goes";
+
+    let buttonHolder = document.createElement("div");
+    let yesButton = document.createElement("button");
+    let noButton = document.createElement("button");
+
+    yesButton.textContent = "Yes";
+    noButton.textContent = "No";
+
+    buttonHolder.classList.add("buttonholder");
+    yesButton.classList.add("yes");
+    noButton.classList.add("no");
+
+    buttonHolder.append(yesButton, noButton);
+    confirmOption.append(confirmText, buttonHolder);
+
+    qs("body").appendChild(confirmOption)
+    confirmOption.showModal();
+
+    return new Promise((resolve) => {
+      yesButton.addEventListener("click", () => resolve(true));
+      noButton.addEventListener("click", () => {
+        resolve(false)
+      });
+    });
   }
 
   async function clearConnections() {

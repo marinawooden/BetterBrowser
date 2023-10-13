@@ -853,12 +853,12 @@ h1, h2, h3, h4, select, #table-view > div > p {
 
 .yes {
   background-color: greenyellow;
-  background-image: linear-gradient(greenyellow, #009357);
+  background-image: linear-gradient(#d2ff00, #04f392);
 }
 
 .no {
-  background-color: salmon;
-  background-image: linear-gradient(salmon, #be2a29);
+  background-color: #ff428e;
+  background-image: linear-gradient(#ff428e, #bd0010);
 }
 
 .yes, .no {
@@ -886,6 +886,7 @@ dialog {
   height: calc(100% - 4em);
   margin: 0;
   max-height: 125px;
+  max-width: 300px;
   background-color: rgb(35, 40, 40);
   border-radius: 7px;
   color: var(--text-highlight);
