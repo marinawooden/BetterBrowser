@@ -167,7 +167,7 @@ ipcMain.handle("add-dataview-changes", async (event, ...args) => {
     }
 
     await previewDB.conn.exec(`BEGIN TRANSACTION;`);
-    await previewDB.conn.run(`UPDATE ${table} SET \`${modifiedColumn}\` = ? WHERE \`${pk}\` = ?;`, value, pkValue);
+    await previewDB.conn.run(`UPDATE \`${table}\` SET \`${modifiedColumn}\` = ? WHERE \`${pk}\` = ?;`, value, pkValue);
     let violations = await previewDB.conn.all("PRAGMA foreign_key_check");
 
     if (violations.length > 0) {
@@ -273,11 +273,11 @@ ipcMain.handle("commit-dataview-changes", async (event, ...args) => {
  */
 ipcMain.handle("get-other-columns", async (event, ...args) => {
   try {
-    if (!db || !editingTable) {
+    if (!db) {
       throw new Error("No database or currently open table was given");
     }
 
-    let saufCurrent = args[0];
+    let saufCurrent = args[0] || !editingTable;
     let ans = {};
     let query = `SELECT tbl_name FROM sqlite_master WHERE tbl_name NOT LIKE "sqlite_sequence"${saufCurrent ? ` AND tbl_name NOT LIKE "${editingTable}"` : ``}`;
      
@@ -522,7 +522,7 @@ ipcMain.handle("csv-select", async (event, ...args) => {
   try {
     let pathSelect = await openCSVDialog();
     
-    if (pathSelect["canceled"]) {
+    if (!pathSelect || pathSelect["canceled"]) {
       return {
         "type": "passive",
       }
@@ -588,7 +588,7 @@ ipcMain.handle("get-constraints", async () => {
       throw new Error("No table or database currently open!");
     }
 
-    let cols = await db.all(`PRAGMA table_info(${editingTable})`);
+    let cols = await db.all(`PRAGMA table_info(\`${editingTable}\`)`);
     let createStmt = await db.get(`SELECT sql FROM sqlite_master WHERE tbl_name = ? AND type = 'table'`, editingTable)
 
 
@@ -647,7 +647,7 @@ ipcMain.handle("delete-col", async (event, ...args) => {
     }
 
     let coltodrop = args[0];
-    let query = `ALTER TABLE ${editingTable} DROP COLUMN ${coltodrop};`;
+    let query = `ALTER TABLE \`${editingTable}\` DROP COLUMN \`${coltodrop.match(/(?<=").*(?=")/)}\`;`;
 
     await db.exec(query);
     await previewDB.conn.exec(query);
@@ -689,7 +689,22 @@ ipcMain.handle('update-table', async (event, ...args) => {
       throw new Error("Missing required arguments");
     }
 
-    let ogColumns = (await db.all(`SELECT name FROM pragma_table_info("${editingTable}")`)).map((col, i) =>  {
+    console.log(newColNames);
+    let ogColumns = (await db.all(`SELECT name FROM pragma_table_info("${editingTable}")`))
+
+    if (newColNames.length < ogColumns.length) {
+      // columns have been removed
+      console.log("Deleted?");
+      ogColumns = ogColumns.filter((col) => {
+        console.log(col.name)
+        return newColNames.includes(`"${col.name}"`)
+      });
+
+      console.log(ogColumns);
+    }
+
+    
+    ogColumns = ogColumns.map((col, i) =>  {
       return defaults[i] ? `COALESCE(\`${col.name}\`, "${defaults[i].replace(/'/g, "''")}")` : `\`${col.name}\``;
     });
 
@@ -707,6 +722,8 @@ ipcMain.handle('update-table', async (event, ...args) => {
     query += `\nDROP TABLE "${editingTable}";`;
     query += `\nALTER TABLE ${tmpname} RENAME TO \`${newName}\`;`;
     query += `\nCOMMIT;`;
+
+    console.log(query);
 
      
     await db.exec(query);
@@ -737,10 +754,10 @@ ipcMain.handle('update-table', async (event, ...args) => {
  * @param {Array} colnames - names of columns
  * @returns String of quotes comma-separated column names
  */
-function formatColumns(colnames) {
+function formatColumns(colnames, separator = '"') {
   ans = "";
   colnames.forEach((name, i) => {
-    ans += `"${name}${(i + 1) < colnames.length ? '", ' : '"'}`;
+    ans += `${separator}${name}${(i + 1) < colnames.length ? `${separator}, ` : separator}`;
   });
 
   return ans;
@@ -916,36 +933,37 @@ ipcMain.handle('add-empty-row', async (event, ...args) => {
     const DEFAULTS = {
       "INTEGER": -1,
       "REAL": -1.0,
-      "TEXT": "-",
-      "BLOB": "-",
+      "TEXT": '"-"',
+      "BLOB": '"-"',
     }
 
     let isAutoincrement = await db.get("SELECT * FROM sqlite_master WHERE type = 'table' AND name = ? AND sql LIKE '%AUTOINCREMENT%'", table);
     let colNames = [];
-    let defValues = await Promise.all((await previewDB.conn.all(`PRAGMA table_info("${table}")`)).map(async (col) => {
+    let defValues = await Promise.all((await previewDB.conn.all(`PRAGMA table_info(\`${table}\`)`)).map(async (col) => {
       colNames.push(col.name)
 
       if (col.pk === 1 && isAutoincrement) {
-        let lastRecord = await previewDB.conn.get(`SELECT COUNT(*) as count FROM ${table}`);
+        let lastRecord = await previewDB.conn.get(`SELECT COUNT(*) as count FROM \`${table}\``);
         // console.log(lastRecord);
         return lastRecord.count + 2;
       }
-      return col.dflt_value ? col.dflt_value : col.notnull === 1 ? DEFAULTS[col.type] || "'-'" : 'null'
+
+      return col.dflt_value ? `\`${col.dflt_value}\`` : col.notnull === 1 ? DEFAULTS[col.type] || "`-`" : null;
     }));
 
     console.log(defValues)
-    console.log(`INSERT INTO ${table} (${colNames}) VALUES (${defValues.join(', ')})`);
+    console.log(`INSERT INTO \`${table}\` (${formatColumns(colNames, '`')}) VALUES (${defValues.map(() => "?")});`);
 
     await previewDB.conn.exec("BEGIN TRANSACTION;")
-    let pk = (await db.all(`PRAGMA table_info("${table}")`)).find((col) => col.pk === 1).name;
-    let res = await previewDB.conn.run(`INSERT INTO ${table} (${colNames}) VALUES (${defValues.join(', ')})`);
-    let lastRecord = await previewDB.conn.get(`SELECT * FROM ${table} WHERE ${pk} = ?`, res.lastID);
+    let pk = (await db.all(`PRAGMA table_info(\`${table}\`)`)).find((col) => col.pk === 1).name;
+    let res = await previewDB.conn.run(`INSERT INTO \`${table}\` (${formatColumns(colNames, '`')}) VALUES (${defValues.map(() => "?")});`, defValues);
+    let lastRecord = await previewDB.conn.get(`SELECT * FROM \`${table}\` WHERE ${pk} = ?`, res.lastID);
 
     await previewDB.conn.exec("COMMIT;");
     
     // get foreign key conflicts
     let violations = await previewDB.conn.all("PRAGMA foreign_key_check");
-    let foreignKeyNames = await previewDB.conn.all(`PRAGMA foreign_key_list('${table}')`);
+    let foreignKeyNames = await previewDB.conn.all(`PRAGMA foreign_key_list(\`${table}\`)`);
 
     let conflicts = violations.map((viol) => {
       return {
@@ -954,8 +972,6 @@ ipcMain.handle('add-empty-row', async (event, ...args) => {
       }
     }).filter((elem) => elem.table === table && elem.rowid === res.lastID)
     // let conflicts = getForeignKeyViolations(table);
-
-    console.log(conflicts);
     
     return {
       "type": "success",
@@ -1235,14 +1251,17 @@ ipcMain.handle('open-database', async (event, ...args) => {
     if (!dbPath) {
       let pathSelect = await openDatabaseDialog();
       
-      if (!pathSelect["canceled"]) {
+      if (pathSelect && !pathSelect["canceled"]) {
         if (/.sql$/.test(pathSelect["filePaths"][0])) {
           sqlPath = pathSelect["filePaths"][0];
           // open new database dialog
-          let selectLocation = openSaveDialog();
+          let selectLocation = await openSaveDialog();
 
-          if (!selectLocation["canceled"]) {
+          if (selectLocation && !selectLocation["canceled"]) {
             dbPath = selectLocation;
+          } else {
+            sqlPath = null;
+            pathSelect = null;
           }
           
         } else {
@@ -1252,6 +1271,9 @@ ipcMain.handle('open-database', async (event, ...args) => {
     }
 
     if (dbPath) {
+      // send loading screen
+      win.webContents.send("creating-database");
+
       if (db) {
         await db.close();
         db = null;
@@ -1259,8 +1281,6 @@ ipcMain.handle('open-database', async (event, ...args) => {
       
       db = await getDBConnection(dbPath);
       await createPreviewDb(dbPath);
-       
-      
 
       if (sqlPath) {
         // populate the db
@@ -1271,7 +1291,6 @@ ipcMain.handle('open-database', async (event, ...args) => {
 
       let existing = store.get('recent-db');
 
-      //  
       if (!existing) {
         store.set('recent-db', [dbPath]);
       } else if (!existing.includes(dbPath)) {
@@ -1285,6 +1304,7 @@ ipcMain.handle('open-database', async (event, ...args) => {
         "res": currentDBPath
       }
     } else {
+      console.log("RETURNING NOTHING")
       return {
         "type": "neutral",
         "err": "Nothing Selected"
@@ -1301,8 +1321,8 @@ ipcMain.handle('open-database', async (event, ...args) => {
 /** Allows the user to create a new database */
 ipcMain.handle('add-database', async () => {
   try {
-    let selectedPath = openSaveDialog();
-    if (!selectedPath?.["canceled"]) {
+    let selectedPath = await openSaveDialog();
+    if (selectedPath && !selectedPath["canceled"]) {
       try {
         await fsasync.access(selectedPath)
         await fsasync.unlink(selectedPath);
@@ -1322,7 +1342,10 @@ ipcMain.handle('add-database', async () => {
 
       currentDBPath = selectedPath;
 
-      return selectedPath;
+      return {
+        "type": "success",
+        "result": selectedPath
+      };
     } else {
       return {
         "type": "pass",
@@ -1356,7 +1379,7 @@ ipcMain.handle('add-table', async (event, ...args) => {
 
       return "UPDATED TABLE";
     } catch (err) {
-       
+      console.error(err);
       return err.message;
     }
   } else {

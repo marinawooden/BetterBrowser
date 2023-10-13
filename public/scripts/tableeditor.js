@@ -326,8 +326,6 @@
     defaultHolder.appendChild(defaultInput);
     defaultInput.value = constraints?.default?.replace(/['"]+/g, '') || "";
 
-    console.log(constraints.default);
-
     defaultInput.addEventListener("input", () => {
       hasChanges = true
     })
@@ -379,17 +377,14 @@
     }
 
     if (isNew) {
-      row.classList.add("new-col")
       hasChanges = true;
-    } else {
-      // add a class if the row refers to a column that actually exists
-      // in the database
-      name.addEventListener("input", function () {
-        updateSelectionName(this);
-        this.closest("tr").classList.add("new-name");
-        hasChanges = true;
-      });
     }
+
+    name.addEventListener("input", function () {
+      updateSelectionName(this);
+      this.closest("tr").classList.add("new-name");
+      hasChanges = true;
+    });
     
     if (qs("#row-builder tbody tr")) {
       qs("#row-builder tbody tr").parentNode.insertBefore(row, qs("#row-builder tbody tr").nextSibling);
@@ -486,7 +481,11 @@
     closeIcon.alt = "Close button";
     closeButton.classList.add("remove-row");
 
-    closeButton.addEventListener("click", deleteColFromTable);
+    // closeButton.addEventListener("click", deleteColFromTable);
+    closeButton.addEventListener("click", function () {
+      this.closest("tr").remove();
+      hasChanges = true;
+    });
 
     closeButton.appendChild(closeIcon);
     closeHolder.appendChild(closeButton);
@@ -497,25 +496,25 @@
   /**
    * Deletes a column from a table
    */
-  async function deleteColFromTable() {
-    try {
-      let colname = `"${this.closest("tr").dataset.name}"`;
-      alert(`Are you sure you want to delete the column "${colname}"? (This will remove all data stored in this column!)`);
+  // async function deleteColFromTable() {
+  //   try {
+  //     let colname = `"${this.closest("tr").dataset.name}"`;
+  //     alert(`Are you sure you want to delete the column "${colname}"? (This will remove all data stored in this column!)`);
 
-      if (!this.closest("tr").classList.contains("new-col")) {
-        // delete from table for real
-        let res = await ipc.invoke("delete-col", colname);
-        if (res.type === "err") {
-          throw new Error(res.err);
-        }
-      }
+  //     if (!this.closest("tr").classList.contains("new-col")) {
+  //       // delete from table for real
+  //       let res = await ipc.invoke("delete-col", colname);
+  //       if (res.type === "err") {
+  //         throw new Error(res.err);
+  //       }
+  //     }
 
-      qs(`#pk[value='${this.closest("tr").dataset.name}']`)
-      this.closest("tr").remove();
-    } catch (err) {
-      handleError(err);
-    }
-  }
+  //     qs(`#pk[value='${this.closest("tr").dataset.name}']`)
+  //     this.closest("tr").remove();
+  //   } catch (err) {
+  //     handleError(err);
+  //   }
+  // }
 
   /**
    * Retrieves information columns in a table.
@@ -587,8 +586,33 @@
    * Displays an error message on the page
    * @param {String} message - the message to display
    */
-  function handleError(message) {
-    console.error(message);
-    alert(message);
+  function handleError(err) {
+    console.error(err);
+    betterPopup("An Error Occurred :-(", err.message);
+  }
+
+  function betterPopup(title, text, btnText = "Dismiss") {
+    let popup = document.createElement("dialog");
+    let tt = document.createElement("p");
+    tt.classList.add("popup-title");
+
+    let dt = document.createElement("p");
+    
+    tt.textContent = title;
+    dt.textContent = text;
+
+    popup.id = "disco-2000";
+
+    let dismiss = document.createElement("button");
+    dismiss.textContent = btnText;
+    dismiss.addEventListener("click", () => {
+      setTimeout(() => {
+        popup.remove();
+      }, 1000)
+    });
+
+    popup.append(tt, dt, dismiss);
+    qs("body").appendChild(popup);
+    popup.showModal();
   }
 })();

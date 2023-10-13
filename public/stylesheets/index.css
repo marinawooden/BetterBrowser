@@ -143,6 +143,13 @@ th:first-of-type {
   padding: 0 0.5em;
 }
 
+.popup-title {
+  font-size: 1.3em;
+  font-family: 'Schibsted Grotesk', sans-serif;
+  font-weight: bold;
+  margin: 0;
+}
+
 #pagination-holder {
   height: 25px;
   bottom: 0;
@@ -203,10 +210,15 @@ th:first-of-type {
   text-decoration-color: #e43030;
 }
 
+
 .invalid-row + div::before {
   content: url(../images/triangle-top.svg);
   position: absolute;
   transform: translateY(-10.6px);
+}
+
+.invalid-row.overflowed + div::before {
+  display: none;
 }
 
 .invalid-row + div {
@@ -401,6 +413,39 @@ label {
 #logo img {
   width: 20px;
   padding-right: 6px;
+}
+
+#loading-overlay {
+  position: absolute;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #00000075;
+}
+
+#loading-overlay img {
+  animation: 3s loadspin linear infinite;
+}
+
+#query-tester > div > section.query-error {
+  background-color: #8b00003b;
+  color: salmon;
+}
+
+@keyframes loadspin {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+
+  50% {
+    transform: rotate(360deg) scale(0.5);
+  }
+
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
 }
 
 main {

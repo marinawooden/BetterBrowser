@@ -90,7 +90,6 @@ const ipc = require('electron').ipcRenderer;
       // 
       // change the type
       let v = e.currentTarget.closest("tr").parentNode.children;
-      console.log(e.closest("table").children[v.length - v.indexOf(e.currentTarget.closest("tr"))]);
       let nameDisplayed = qs("p[class='" + (colName ? colName : `Field${rowNum}`) + "']").querySelector(".col-type");
       nameDisplayed.textContent = e.currentTarget.value;
     })
@@ -172,7 +171,7 @@ const ipc = require('electron').ipcRenderer;
       }
       return res;
     } catch (err) {
-      alert(err);
+      handleError(err);
     }
   }
 
@@ -197,7 +196,6 @@ const ipc = require('electron').ipcRenderer;
             let rowSelect = document.createElement("select");
             let foreignKeys = await getForeignKeys();
 
-            console.log(foreignKeys.results);
             Object.keys(foreignKeys.results).forEach((table) => {
               let columns = foreignKeys.results[table];
               let optgroup = document.createElement("optgroup");
@@ -249,7 +247,6 @@ const ipc = require('electron').ipcRenderer;
 
     
     return [...columns].map((col) => {
-      console.log(col);
       let defaultValue = col.querySelector(".def").value;
 
       if (col.querySelector(".nn").checked && !col.querySelector(".def").value) {
@@ -288,11 +285,9 @@ const ipc = require('electron').ipcRenderer;
         ${columnNames},${foreignKeys.length > 0 ? foreignKeys + "," : ""}${primaryKey})
       `.trim();
 
-      console.log(query);
-
       return query;
     } catch (err) {
-      console.log(err);
+      console.error(err);
     }
   }
 
@@ -331,11 +326,7 @@ const ipc = require('electron').ipcRenderer;
     colTableElem.id = `${colInTable}-fk`;
     colTableElem.textContent = colInTable;
     stmt.appendChild(colTableElem);
-    console.log(colTableElem);
-
-    console.log(fkey.split("."))
     stmt.appendChild(document.createTextNode(`") REFERENCES "${referencesTable}"("${referencesColum}")`));
-    console.log(stmt);
 
     id("foreign-keys").appendChild(stmt);
     // removal as well
@@ -445,14 +436,14 @@ const ipc = require('electron').ipcRenderer;
     e.preventDefault();
     try {
       // let query = qs("#create-table-query").textContent;
-      let query = `CREATE TABLE ${id("new-table-name").textContent} (\n`;
+      let query = `CREATE TABLE \`${id("new-table-name").textContent}\` (\n`;
       query += creationStmt();
       query += "\n);";
       
-      let tables = await ipc.invoke('add-table', query);
+      await ipc.invoke('add-table', query);
       // alert(tables);
     } catch (err) {
-      alert(err);
+      handleError(err);
     }
   }
 
@@ -466,5 +457,39 @@ const ipc = require('electron').ipcRenderer;
 
   function id(id) {
     return document.getElementById(id);
+  }
+
+  /**
+   * Displays an error message on the page
+   * @param {String} message - the message to display
+   */
+  function handleError(err) {
+    console.error(err);
+    betterPopup("An Error Occurred :-(", err.message);
+  }
+
+  function betterPopup(title, text, btnText = "Dismiss") {
+    let popup = document.createElement("dialog");
+    let tt = document.createElement("p");
+    tt.classList.add("popup-title");
+
+    let dt = document.createElement("p");
+    
+    tt.textContent = title;
+    dt.textContent = text;
+
+    popup.id = "disco-2000";
+
+    let dismiss = document.createElement("button");
+    dismiss.textContent = btnText;
+    dismiss.addEventListener("click", () => {
+      setTimeout(() => {
+        popup.remove();
+      }, 1000)
+    });
+
+    popup.append(tt, dt, dismiss);
+    qs("body").appendChild(popup);
+    popup.showModal();
   }
 })();

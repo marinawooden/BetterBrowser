@@ -10,10 +10,8 @@
   }
   
   let selectedRows = [];
-  let violatedRows = [];
   let pageViewing = 0;
   let sortingCol;
-  let prevError;
 
   window.addEventListener("load", init);
 
@@ -75,6 +73,20 @@
     window.addEventListener("resize", () => {
       responsiveDataViewColumns(qs("#table-view table"))
     });
+  }
+
+  function loadingScreen() {
+    id("loading-overlay")?.remove();
+
+    let overlay = document.createElement("div");
+    overlay.id = "loading-overlay";
+
+    let loaderIcon = document.createElement("img");
+    loaderIcon.src = "images/logo.svg";
+    loaderIcon.alt = "A spinning start";
+
+    overlay.appendChild(loaderIcon);
+    qs("body").appendChild(overlay);
   }
 
   async function selectAllVisibleRows(elem) {
@@ -285,8 +297,7 @@
       await populateDbView();
       await populateDataViewerOptions();
     } catch (err) {
-      console.error(err);
-      alert(err.message);
+      handleError(err);
     }
   }
 
@@ -312,7 +323,6 @@
 
   async function saveNewChanges() {
     try {
-      // TODO: get table name from element
       let viewingTable = id("table-name").value;
       let columnValues = getNewColumnValues();
       let res;
@@ -321,7 +331,6 @@
         res = await ipc.invoke("add-new-rows", viewingTable, getNewColumnValues(), getColumnNames(), force);
         if (res.type === "err") {
           if (res.detail === "SQLITE_CONSTRAINT") {
-            // blah factor
             throw new Error("Please resolve all foreign key conflicts before saving!");
           } else {
             throw new Error(res.error);
@@ -395,7 +404,7 @@
           content.contentEditable = true;
           
           if (fkviolations?.includes(res.result[res.pk] + col)) {
-            content.classList.add("invalid-row");
+            makeInvalid(content)
           }
 
           cell.prepend(content);
@@ -411,9 +420,50 @@
       insertAfter(row, qs("#table-view tr"));
       responsiveDataViewColumns();
       id("data-options").classList.add("collapsed");
+      qs("a[href='#viewer']").classList.add("unsaved");
     } catch (err) {
       handleError(err);
     }
+  }
+
+  function ensureInFrame(evt) {
+    // console.log(this.getBoundingClientRect());
+    const vw = qs("body").getBoundingClientRect();
+    const pos = this.getBoundingClientRect();
+
+    // right overflow
+    console.log(pos.width + pos.x + 50);
+    console.log(vw);
+
+    if ((pos.width + pos.x + 50) > vw.width) {
+      let clip = vw.width - (pos.width + pos.x);
+      console.log(clip);
+      this.parentNode.querySelector("div").style.marginLeft = `-${clip}px`;
+      this.classList.add("overflowed");
+    }
+  }
+
+  function resetFrame() {
+    this.classList.remove("overflowed");
+  }
+
+  function makeInvalid(content, message = "FOREIGN_KEY", parent) {
+    parent = parent || content.parentNode;
+    content.classList.add("invalid-row");
+    let msgElem = document.createElement("div");
+    msgElem.textContent = MSG_LOOKUP[message];
+
+    content.addEventListener("mouseover", ensureInFrame);
+    content.addEventListener("mouseleave", resetFrame);
+
+    parent.appendChild(msgElem);
+  }
+
+  function validateRow(cell) {
+    cell.classList.remove("invalid-row");
+    cell.parentNode.querySelector("div")?.remove();
+
+    cell.removeEventListener("mouseover", makeInvalid);
   }
 
   async function saveDataViewerInput(e) {
@@ -432,46 +482,33 @@
         // PROBLEM: IF there's an error in some other column, the commented
         // implementation will highlight the current column as well- even if
         // it's not the one causing the issue
+        console.log(res);
         if (res.type === "err" && res.error !== "too fast") {
+          
           let violatingIds = res.violations?.map((row) => row.rowid + row.from);
           if (res.detail === "FOREIGN_KEY") {
             let colName = qs("#table-view tr").children[[...e.target.closest("tr").children].indexOf(e.target.parentNode)].textContent;
             console.log(e.target.closest("tr").id + colName);
             if (violatingIds.includes(e.target.closest("tr").id + colName)) {
               // foreign key violation
-              e.target.classList.add("invalid-row");
-              let message = document.createElement("div");
-              message.textContent = MSG_LOOKUP[res.detail];
-              e.target.parentNode.appendChild(message);
+              makeInvalid(e.target)
             } else {
-              e.target.classList.remove("invalid-row");
+              validateRow(e.target)
             }
           } else {
-            e.target.classList.add("invalid-row");
-            let message = document.createElement("div");
-            message.textContent = MSG_LOOKUP[res.detail];
-            e.target.parentNode.appendChild(message);
+            makeInvalid(e.target, res.detail)
           }
         } else {
           if (modifiedColumn.id === "pk") {
             e.target.closest("tr").id = value;
           }
-          e.target.classList.remove("invalid-row")
+          validateRow(e.target);
           qs("a[href='#viewer']").classList.add("unsaved");
         }
       }
     } catch (err) {
       handleError(err);
     }
-  }
-
-  function removeFromArray(arr, val) {
-    const index = arr.indexOf(val);
-    if (index > -1) { // only splice array when item is found
-      arr.splice(index, 1); // 2nd parameter means remove one item only
-    }
-
-    return arr
   }
 
   async function removeRows() {
@@ -502,8 +539,7 @@
 
       id("data-options").classList.add("collapsed");
     } catch (err) {
-      console.error(err);
-      alert(err.message);
+      handleError(err);
     }
   }
   
@@ -578,12 +614,18 @@
     let sql = id("sql-input").value;
     if (sql.trim()) {
       try {
+        loadingScreen();
         let res = await ipc.invoke("execute-sql", sql);
+
+        id("loading-overlay")?.remove();
+        id("query-details").innerHTML = "";
+        id("table-limiter").innerHTML = "";
+
         if (res.type === "error") {
           throw new Error(res.err)
         }
 
-        id("query-details").innerHTML = "";
+        id("query-details").classList.remove("query-error")
         
         if (res.data) {
           // SELECT QUERY PROCESSING
@@ -613,12 +655,22 @@
           id("query-details").appendChild(detailsMessage);
         }
       } catch (err) {
-        console.error(err);
-        alert(err);
+        executorError(err);
       }
     } else {
-      alert("Please enter a sql query to execute it!")
+      betterPopup("Please enter a SQL query!", "No SQL query was entered")
     }
+  }
+
+  function executorError(err) {
+    id("query-details").innerHTML = "";
+    id("table-limiter").innerHTML = "";
+
+    id("query-details").classList.add("query-error");
+
+    let errorMessage = document.createElement("p");
+    errorMessage.textContent = err.message;
+    id("query-details").appendChild(errorMessage);
   }
 
   /** Might be redundant- idk if I've already done this and I don't want to look */
@@ -723,8 +775,7 @@
             await populateDbView();
           });
         } catch (err) {
-          console.error(err);
-          alert(err.message);
+          handleError(err);
         }
       })
 
@@ -792,8 +843,7 @@
         await populateDataViewerOptions();
       });
     } catch (err) {
-      console.error(err);
-      alert(err);
+      handleError(err);
     }
   }
 
@@ -806,8 +856,7 @@
         await populateDataViewerOptions();
       });
     } catch (err) {
-      console.error(err);
-      alert(err);
+      handleError(err);
     }
   }
 
@@ -824,8 +873,7 @@
         "tables": tables["tables"].filter((table) => table.tbl !== "sqlite_sequence")
       };
     } catch (err) {
-      console.error(err);
-      alert(err);
+      handleError(err);
     }
   }
 
@@ -838,14 +886,26 @@
 
       return tableData;
     } catch (err) {
-      console.error(err);
-      alert(err);
+      handleError(err);
     }
   }
 
   async function openDatabase(dbPath = "") {
     try {
-      let currentDb = await ipc.invoke('open-database', dbPath);
+      let currentDb = await (async () => {
+        let res = ipc.invoke('open-database', dbPath);
+        ipc.once("creating-database", () => {
+          console.log("IS CREATING DATABASe");
+          loadingScreen();
+        });
+
+        return res
+      })();
+      
+      // WHY IS THIS NOT REMOVING AFTER I CANCEL SELECTING A SQL
+      
+      console.log(currentDb);
+
       if (currentDb.type === "err") {
         throw new Error(currentDb.err);
       } else if (currentDb.type === "success") {
@@ -854,9 +914,11 @@
         await populateDbView();
         await populateDataViewerOptions();
       }
+
+      id("loading-overlay")?.remove();
     } catch (err) {
-      console.error(err);
-      alert(err);
+      id("loading-overlay")?.remove();
+      handleError(err);
     }
   }
 
@@ -878,14 +940,12 @@
   async function clearConnections() {
     try {
       await ipc.invoke('clear-connections');
-
-      if (qs("#recent-connections div")) {
-        await getRecentConnections();
-        await populateDataViewerOptions();
-      }
+      id("recent-connections").innerHTML = "";
+      let noConnections = document.createElement("p");
+      noConnections.textContent = "Databases you connect to will be shown here";
+      id("recent-connections").appendChild(noConnections);
     } catch (err) {
-      console.error(err);
-      alert(err);
+      handleError(err);
     }
   }
 
@@ -894,8 +954,7 @@
       let res = await ipc.invoke('recent-connections');
       populateRecentConnections(res);
     } catch (err) {
-      console.error(err);
-      alert(err);
+      handleError(err);
     }
   }
 
@@ -930,8 +989,7 @@
         id("select-all").classList.remove("selected");
       }
     } catch (err) {
-      console.error(err);
-      alert(err);
+      handleError(err);
     }
   }
 
@@ -1026,10 +1084,7 @@
             cellcontainer.style.maxWidth = `${tableWidth / numColumns}px`;
 
             if (foreignKeyViolations.includes(rowData[tableMeta.pk] + col)) {
-              cellcontainer.classList.add("invalid-row");
-              let errormsg = document.createElement("div");
-              errormsg.textContent = MSG_LOOKUP["FOREIGN_KEY"];
-              cell.appendChild(errormsg);
+              makeInvalid(cellcontainer, "FOREIGN_KEY", cell);
             }
 
             cellcontainer.addEventListener("input", saveDataViewerInput);
@@ -1070,8 +1125,7 @@
 
       responsiveDataViewColumns(qs("#table-view table"));
     } catch (err) {
-      console.error(err);
-      alert(err);
+      handleError(err);
     }
   };
 
@@ -1131,18 +1185,19 @@
     try {
       let currentDb = await ipc.invoke('add-database');
 
+      console.log(currentDb);
+
       if (currentDb.type === "err") {
         throw new Error(currentDb.error);
+      } else if (currentDb.type === "success") {
+        setCurrentDbName(currentDb.result);
+        await populateDbView()
+        await getRecentConnections();
+        // await 
+        await populateDataViewerOptions();
       }
-
-      setCurrentDbName(currentDb);
-      await populateDbView()
-      await getRecentConnections();
-      // await 
-      await populateDataViewerOptions();
     } catch (err) {
-      console.error(err);
-      alert(`Something went wrong`)
+      handleError(err);
     }
   }
 
@@ -1168,6 +1223,32 @@
       }
     }
   }
+  
+
+  function betterPopup(title, text, btnText = "Dismiss") {
+    let popup = document.createElement("dialog");
+    let tt = document.createElement("p");
+    tt.classList.add("popup-title");
+
+    let dt = document.createElement("p");
+    
+    tt.textContent = title;
+    dt.textContent = text;
+
+    popup.id = "disco-2000";
+
+    let dismiss = document.createElement("button");
+    dismiss.textContent = btnText;
+    dismiss.addEventListener("click", () => {
+      setTimeout(() => {
+        popup.remove();
+      }, 1000)
+    });
+
+    popup.append(tt, dt, dismiss);
+    qs("body").appendChild(popup);
+    popup.showModal();
+  }
 
   function qs(query) {
     return document.querySelector(query);
@@ -1183,6 +1264,6 @@
 
   function handleError(err) {
     console.error(err);
-    alert(err)
+    betterPopup("An Error Occurred :-(", err.message);
   }
 })();
