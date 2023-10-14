@@ -936,11 +936,12 @@ ipcMain.handle('add-empty-row', async (event, ...args) => {
     const DEFAULTS = {
       "INTEGER": -1,
       "REAL": -1.0,
-      "TEXT": '"-"',
-      "BLOB": '"-"',
+      "TEXT": '-',
+      "BLOB": '-',
     }
 
     let isAutoincrement = await db.get("SELECT * FROM sqlite_master WHERE type = 'table' AND name = ? AND sql LIKE '%AUTOINCREMENT%'", table);
+    console.log(isAutoincrement.sql);
     let colNames = [];
     let defValues = await Promise.all((await previewDB.conn.all(`PRAGMA table_info(\`${table}\`)`)).map(async (col) => {
       colNames.push(col.name)
@@ -951,7 +952,7 @@ ipcMain.handle('add-empty-row', async (event, ...args) => {
         return lastRecord.count + 2;
       }
 
-      return col.dflt_value ? `\`${col.dflt_value}\`` : col.notnull === 1 ? DEFAULTS[col.type] || "`-`" : null;
+      return col.dflt_value ? col.dflt_value.replace(/"/g, "") : col.notnull === 1 ? DEFAULTS[col.type] || "`-`" : null;
     }));
 
     console.log(defValues)
