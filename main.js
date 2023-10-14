@@ -684,7 +684,7 @@ ipcMain.handle('update-table', async (event, ...args) => {
     let creationStmt = args[0];
     let newName = args[1];
     let newColNames = args[2];
-    let defaults = args[3];
+    let defaults = args[3].reverse();
 
     console.log(creationStmt);
 
@@ -697,7 +697,6 @@ ipcMain.handle('update-table', async (event, ...args) => {
 
     if (newColNames.length < ogColumns.length) {
       // columns have been removed
-      console.log("Deleted?");
       ogColumns = ogColumns.filter((col) => {
         console.log(col.name)
         return newColNames.includes(`"${col.name}"`)
@@ -711,14 +710,18 @@ ipcMain.handle('update-table', async (event, ...args) => {
       return defaults[i] ? `COALESCE(\`${col.name}\`, "${defaults[i].replace(/'/g, "''")}")` : `\`${col.name}\``;
     });
 
+    console.log(defaults);
+
     for (let i = 0; i < (newColNames.length - ogColumns.length); i++) {
-      ogColumns.push(defaults[i + ogColumns.length] ? `TEXT("${defaults[i + ogColumns.length]})"` : "NULL")
+      ogColumns.push(defaults[i + ogColumns.length] ? `TEXT("${defaults[i + ogColumns.length]}")` : "NULL")
     }
 
     //  
     await db.exec("BEGIN TRANSACTION;");
     await previewDB.conn.exec("BEGIN TRANSACTION;");
     let tmpname = `"${Date.now()}"`;
+
+    console.log(newColNames);
 
     let query = `\nCREATE TABLE ${tmpname} (\n${creationStmt}\n);`;
     query += `\nINSERT INTO ${tmpname} (${newColNames}) SELECT ${ogColumns} FROM \`${editingTable}\`;`;
@@ -941,7 +944,6 @@ ipcMain.handle('add-empty-row', async (event, ...args) => {
     }
 
     let isAutoincrement = await db.get("SELECT * FROM sqlite_master WHERE type = 'table' AND name = ? AND sql LIKE '%AUTOINCREMENT%'", table);
-    console.log(isAutoincrement.sql);
     let colNames = [];
     let defValues = await Promise.all((await previewDB.conn.all(`PRAGMA table_info(\`${table}\`)`)).map(async (col) => {
       colNames.push(col.name)
