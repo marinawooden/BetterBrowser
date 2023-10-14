@@ -1,0 +1,94 @@
+:root {
+  --bg-primary: rgb(28 28 31);
+  --bg-darker: rgb(20 20 20);
+  --bg-lighter: rgb(41 41 45);
+  --tbl-row-one: rgb(20 20 20);
+  --tbl-tow-two: rgb(22 25 26);
+  --text-primary: rgb(106 106 106);
+  --text-lighter: rgb(124, 124, 124);
+  --text-highlight: rgb(225 225 225);
+  --border-primary: rgb(37 38 39);
+}
+
+a {
+  color: var(--text-highlight);
+}
+
+body {
+  font-family: 'Inconsolata', monospace;
+  background-color: var(--bg-darker);
+  /* background-image: radial-gradient(circle at bottom, rgb(24 24 42), rgb(14 11 11)); */
+  background-size: 100vw 100vh;
+  color: var(--text-primary);
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+h1, h2, h3 {
+  font-family: 'Wix Madefor Display', sans-serif;
+  color: var(--text-highlight);
+  font-weight: 500;
+  /* background-color: #ffe900;
+  background-image: linear-gradient(#ffe900, #ff6300);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent; */
+}
+
+h2 {
+  background-color: #ffe900;
+  background-image: linear-gradient(#ffe900, #ff6300);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: 1em;
+  text-align: center;
+}
+
+main {
+  width: 100vw;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+main, body {
+  justify-content: center;
+  flex-direction: column;
+}
+
+main > section {
+  margin: 1em;
+  width: 100%;
+}
+
+footer {
+  position: absolute;
+  bottom: 0;
+  padding: 1em;
+  font-size: x-small;
+}
+
+footer a {
+  text-decoration: none;
+  color: var(--text-lighter);
+}
+
+#logo > div, main, body {
+  display: flex;
+  align-items: center;
+}
+
+#logo > div h1 {
+  font-weight: 500;
+}
+
+#logo > div h1, #logo p {
+  margin: 0;
+}
+
+#logo p {
+  text-align: right;
+}
+
+#logo > div img {
+  height: 40px;
+}
