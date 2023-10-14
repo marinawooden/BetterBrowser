@@ -1,7 +1,7 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 
 const path = require('path')
-const env = process.env.NODE_ENV || 'development';
+const env = process.env.NODE_ENV || 'production';
 const OFFSET = 10;
 const os = require('os');
 
@@ -30,6 +30,7 @@ const openTableCreator = () => {
   tableCreator = new BrowserWindow({
     width: 600,
     height: 600,
+    icon: '/public/icons/Icon.jpg',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: true,
@@ -43,6 +44,7 @@ const openTableCreator = () => {
 
 const openCSVEditor = () => {
   csvUpload = new BrowserWindow({
+    icon: '/public/icons/Icon.jpg',
     width: 600,
     height: 450,
     webPreferences: {
@@ -57,6 +59,7 @@ const openCSVEditor = () => {
 
 const openTableEditor = () => {
   tableEditor = new BrowserWindow({
+    icon: '/public/icons/Icon.jpg',
     width: 600,
     height: 450,
     webPreferences: {
@@ -1511,6 +1514,7 @@ const createWindow = async () => {
   win = new BrowserWindow({
     width: 800,
     height: 600,
+    icon: '/public/icons/Icon.jpg',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: true,
