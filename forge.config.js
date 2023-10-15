@@ -1,27 +1,16 @@
-// require('dotenv').config();
-
-// console.log(Object.keys(process.env).includes("APPLE_ID"));
 
 module.exports = {
   packagerConfig: {
     asar: true,
     icon: './public/icons/Icon'
-    // osxSign: {},
-    // osxNotarize: {
-    //   tool: 'notarytool',
-    //   appleId: process.env.APPLE_ID,
-    //   appleIdPassword: process.env.APPLE_PASSWORD,
-    //   teamId: process.env.APPLE_TEAM_ID
-    // }
   },
   rebuildConfig: {},
   makers: [
     {
       name: '@electron-forge/maker-squirrel',
-      config: {
-        // An URL to an ICO file to use as the application icon (displayed in Control Panel > Programs and Features).
-        setupIcon: './public/img/Icon.ico'
-      },
+      iconUrl: 'https://raw.githubusercontent.com/marinawooden/BetterBrowser/d0ed5e77ab1257c76a9b3f1fa77e0d7c306968fd/public/icons/Icon.ico',
+      // A URL to an ICO file to use as the application icon (displayed in Control Panel > Programs and Features).
+      setupIcon: './public/img/Icon.ico'
     },
     {
       name: '@electron-forge/maker-zip',
@@ -69,14 +58,12 @@ module.exports = {
     {
       name: '@electron-forge/maker-wix',
       config: {
-        icon: './public/icons/Icon-Setup.png'
+        icon: './public/icons/Icon.ico'
       }
     },
     {
       name: '@electron-forge/maker-rpm',
-      config: {
-        icon: './public/icons/Icon-Setup.png'
-      },
+      icon: './public/icons/Icon-Setup.png'
     },
   ],
   plugins: [
