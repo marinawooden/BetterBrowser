@@ -985,7 +985,7 @@
   async function getRecentConnections() {
     try {
       let res = await ipc.invoke('recent-connections');
-      populateRecentConnections(res);
+      populateRecentConnections(res || []);
     } catch (err) {
       handleError(err);
     }
