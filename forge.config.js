@@ -56,12 +56,6 @@ module.exports = {
       }
     },
     {
-      name: '@electron-forge/maker-wix',
-      config: {
-        icon: './public/icons/Icon.ico'
-      }
-    },
-    {
       name: '@electron-forge/maker-rpm',
       icon: './public/icons/Icon-Setup.png'
     },
