@@ -8,6 +8,15 @@
     "package": "electron-forge package",
     "make": "electron-forge make"
   },
+  "build": {
+    "productName": "BetterBrowser",
+    "appId": "io.github.marinawooden.BetterBrowser",
+    "copyright": "Copyright",
+    "directories": {
+      "output": "build"
+    },
+    "afterSign": "scripts/notarize.js"
+  },
   "author": "Marina Wooden",
   "license": "MIT",
   "dependencies": {
@@ -18,6 +27,7 @@
     "dotenv": "^16.3.1",
     "electron-squirrel-startup": "^1.0.0",
     "electron-store": "^8.1.0",
+    "electron-wix-msi": "^5.0.0",
     "http": "^0.0.1-security",
     "sqlite": "^4.2.1",
     "sqlite3": "^5.1.6"

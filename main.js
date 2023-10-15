@@ -38,6 +38,8 @@ const openTableCreator = () => {
     }
   })
 
+  tableCreator.setMenu(null);
+
   tableCreator.loadFile('public/tablecreator.html')
   // tableCreator.webContents.openDevTools();
 }
@@ -54,6 +56,7 @@ const openCSVEditor = () => {
     }
   })
 
+  csvUpload.setMenu(null);
   csvUpload.loadFile('public/uploadcsv.html')
 }
 
@@ -68,6 +71,8 @@ const openTableEditor = () => {
       contextIsolation: false
     }
   })
+
+  tableEditor.setMenu(null);
 
   tableEditor.on('closed', () => {
     tableEditor = null
@@ -1524,6 +1529,8 @@ const createWindow = async () => {
       contextIsolation: false
     }
   })
+
+  win.setMenu(null);
 
   win.on("closed", async () => {
     if (hasUnsavedChanges) {

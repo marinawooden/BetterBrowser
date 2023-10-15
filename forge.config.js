@@ -1,3 +1,4 @@
+
 module.exports = {
   packagerConfig: {
     asar: true,
@@ -14,12 +15,9 @@ module.exports = {
   makers: [
     {
       name: '@electron-forge/maker-squirrel',
-      config: {
-        authors: "Marina Wooden",
-        setupIcon: './public/img/Icon.ico',
-        exe: "BetterBrowserInstaller.exe",
-        name: ""
-      },
+      iconUrl: 'https://raw.githubusercontent.com/marinawooden/BetterBrowser/d0ed5e77ab1257c76a9b3f1fa77e0d7c306968fd/public/icons/Icon.ico',
+      // A URL to an ICO file to use as the application icon (displayed in Control Panel > Programs and Features).
+      setupIcon: './public/img/Icon.ico'
     },
     {
       name: '@electron-forge/maker-zip',
@@ -67,14 +65,12 @@ module.exports = {
     {
       name: '@electron-forge/maker-wix',
       config: {
-        icon: './public/icons/Icon-Setup.png'
+        icon: './public/icons/Icon.ico'
       }
     },
     {
       name: '@electron-forge/maker-rpm',
-      config: {
-        icon: './public/icons/Icon-Setup.png'
-      },
+      icon: './public/icons/Icon-Setup.png'
     },
   ],
   plugins: [
