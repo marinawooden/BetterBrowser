@@ -1,15 +1,24 @@
 module.exports = {
   packagerConfig: {
     asar: true,
-    icon: './public/icons/Icon'
+    icon: './public/icons/Icon',
+    osxSign: {},
+    osxNotarize: {
+      tool: 'notarytool',
+      appleId: process.env.APPLE_ID,
+      appleIdPassword: process.env.APPLE_PASSWORD,
+      teamId: process.env.APPLE_TEAM_ID
+    }
   },
   rebuildConfig: {},
   makers: [
     {
       name: '@electron-forge/maker-squirrel',
       config: {
-        // An URL to an ICO file to use as the application icon (displayed in Control Panel > Programs and Features).
-        setupIcon: './public/img/Icon.ico'
+        authors: "Marina Wooden",
+        setupIcon: './public/img/Icon.ico',
+        exe: "BetterBrowserInstaller.exe",
+        name: ""
       },
     },
     {

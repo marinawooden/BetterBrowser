@@ -13,7 +13,9 @@
   "dependencies": {
     "@electron-forge/maker-dmg": "^6.4.2",
     "@electron-forge/maker-wix": "^6.4.2",
+    "@electron/osx-sign": "^1.0.5",
     "csv-parse": "^5.5.0",
+    "dotenv": "^16.3.1",
     "electron-squirrel-startup": "^1.0.0",
     "electron-store": "^8.1.0",
     "http": "^0.0.1-security",
@@ -27,6 +29,7 @@
     "@electron-forge/maker-squirrel": "^6.4.2",
     "@electron-forge/maker-zip": "^6.4.2",
     "@electron-forge/plugin-auto-unpack-natives": "^6.4.2",
+    "@electron/notarize": "^2.1.0",
     "electron": "^24.8.8",
     "electron-reload": "^2.0.0-alpha.1",
     "electron-reloader": "^1.2.3"
