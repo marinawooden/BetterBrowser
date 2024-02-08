@@ -240,7 +240,7 @@
     let tableWidth = table?.parentNode?.offsetWidth - 300;
     let numColumns = table?.querySelectorAll("th").length - 1;
 
-    let content = table?.querySelectorAll("p");
+    let content = table?.querySelectorAll("tr td:not(:first-of-type) p");
 
     if (content) {
       [...content].forEach((elem) => {
@@ -381,6 +381,8 @@
       qs("#table-view .table-no-data-footer")?.remove();
 
       let row = document.createElement("tr");
+      console.log(res);
+
       row.id = res.result[res.pk];
       let fkviolations = res.fkconflicts?.map((e) => e.rowid + e.col);
 
@@ -418,7 +420,8 @@
       }
       
       insertAfter(row, qs("#table-view tr"));
-      responsiveDataViewColumns();
+      
+      responsiveDataViewColumns(qs("#table-view table"));
       id("data-options").classList.add("collapsed");
       qs("a[href='#viewer']").classList.add("unsaved");
     } catch (err) {
@@ -798,7 +801,7 @@
     lastLi.id = "add-table";
     lastLi.textContent = "+ Add Table";
     lastLi.addEventListener("click", () => {
-      id("add-table-options").classList.toggle("collapsed");
+      id("add-table-options").classList.toggle("hidden");
     });
 
     let addTableOptions = document.createElement("div");
@@ -806,7 +809,7 @@
     let manual = document.createElement("p");
 
     addTableOptions.id = "add-table-options";
-    addTableOptions.classList.add("collapsed");
+    addTableOptions.classList.add("hidden");
 
     fromCSV.textContent = "From CSV";
     manual.textContent = "Manual Entry";
@@ -868,6 +871,7 @@
         throw new Error(tables.error)
       }
 
+      console.log(tables);
       return {
         "db": tables["db"],
         "tables": tables["tables"].filter((table) => table.tbl !== "sqlite_sequence")
@@ -901,8 +905,6 @@
 
         return res
       })();
-      
-      // WHY IS THIS NOT REMOVING AFTER I CANCEL SELECTING A SQL
       
       console.log(currentDb);
 
@@ -999,6 +1001,7 @@
       id("table-name").innerHTML = "";
       qs("#table-view > p")?.remove();
 
+     
       if (tables.length === 0) {
         let msg = document.createElement("p");
         msg.textContent = "There's no tables in this database!";
@@ -1041,11 +1044,10 @@
       id("search-table").value = "";
 
       let tableData = await getDataFromTable(table, orderBy, sortDirection);
+      console.log(tableData);
       // todo: use this info to apply the invalid row class to new stuff
       let foreignKeyViolations = await getForeignKeyViolations(table);
       let tableMeta = await ipc.invoke("get-table-meta", table);
-
-      console.log(foreignKeyViolations);
 
       if (!tableMeta.type === "err") {
         throw new Error(tableMeta.error);
@@ -1079,6 +1081,7 @@
         
         columnName.appendChild(columnHolder);
         header.appendChild(columnName);
+        console.log(header);
       });
 
       dataViewTable.dataset.ai = tableMeta.isAutoincrement;
@@ -1137,15 +1140,30 @@
           });
           dataViewTable.appendChild(row);
         });
+
+        // scrolling to load more 
+        dataViewTable.addEventListener("scroll", loadMoreTuples)
         
-        id("table-view").appendChild(dataViewTable);
 
         if (tableData.data.length % 10 !== 0) {
           id("page-next").classList.add("invisible");
         } else {
           id("page-next").classList.remove("invisible");
         }
+      }
+      
+      if (!id("data-holder")) {
+        let dataHolder = document.createElement("div");
+        dataHolder.id = "data-holder";
+        
+        dataHolder.appendChild(dataViewTable);
+        id("table-view").appendChild(dataHolder);
       } else {
+        id("data-holder").appendChild(dataViewTable);
+      }
+
+      if (tableData.data.length === 0) {
+        // append the column names
         let footer = document.createElement("div");
         footer.classList.add("table-no-data-footer");
 
@@ -1153,7 +1171,7 @@
         footerText.textContent = "There's no data there";
 
         footer.appendChild(footerText);
-        id("table-view").append(dataViewTable, footer);
+        id("data-holder")?.append(dataViewTable, footer);
       }
 
       responsiveDataViewColumns(qs("#table-view table"));
@@ -1161,6 +1179,10 @@
       handleError(err);
     }
   };
+
+  function loadMoreTuples() {
+    // console.log(this.)
+  }
 
   function populateRecentConnections(connections) {
     id("recent-connections").innerHTML = "";
@@ -1192,8 +1214,12 @@
     let title = document.createElement("p");
     let loc = document.createElement("p");
     let closeIcon = document.createElement("img");
+
+    loc.classList.add("text-secondary")
+
     closeIcon.src = "./images/close-thin.svg";
     closeIcon.classList.add("remove-connection");
+    closeIcon.classList.add("dark");
 
     closeIcon.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1207,6 +1233,8 @@
     title.textContent = filename;
     icon.src = "./images/star-four-points.svg";
     icon.alt = "four-pointed star";
+
+    icon.classList.add("dark");
 
     meta.append(title, loc);
     connectionFrame.append(icon, meta, closeIcon);

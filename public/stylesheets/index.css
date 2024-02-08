@@ -23,12 +23,14 @@ body {
   --bg-primary: rgb(28 28 31);
   --bg-darker: rgb(20 20 20);
   --bg-lighter: rgb(41 41 45);
+  --bg-lighter-opaque: rgb(41 41 45);
   --tbl-row-one: rgb(20 20 20);
   --tbl-tow-two: rgb(22 25 26);
-  --text-primary: rgb(106 106 106);
+  --text-primary: rgb(204 204 204);
   --text-lighter: rgb(124, 124, 124);
   --text-highlight: rgb(225 225 225);
   --border-primary: rgb(37 38 39);
+  --text-secondary: rgb(128, 128, 128)
 }
 
 #actions {
@@ -127,6 +129,12 @@ button {
   color: rgb(255, 177, 169)
 }
 
+/* Yeah, it's a lame name for an id. (It's the yes/no modal) */
+#disco-2001 {
+  height: 200px;
+  max-height: none;
+}
+
 
 table {
   width: calc(100% - 1em);
@@ -157,6 +165,16 @@ th:first-of-type {
   width: 100%;
   background-color: var(--bg-primary);
   padding-top: 1em;
+}
+
+#preferences-link {
+  text-decoration: none;
+  text-transform: lowercase;
+  color: #ff8300;
+}
+
+#preferences-link:hover {
+  transform: scale(1.2);
 }
 
 #table-page-toggle > *:hover {
@@ -190,7 +208,7 @@ th:first-of-type {
   right: 1em;
   margin-top: 10.5em;
   text-align: right;
-  z-index: 1;
+  z-index: 11;
   transition: 0.5s transform, 0.5s opacity;
   transform-origin: top;
 }
@@ -288,12 +306,12 @@ a.unsaved::before {
 }
 
 #data-options li {
-  padding: .5em;
+  padding: .3em .5em;
 }
 
-#data-options li:not(:first-of-type) {
+/* #data-options li {
   padding-top: 0;
-}
+} */
 
 #database-structure li > p + div {
   display: flex;
@@ -324,7 +342,7 @@ a.unsaved::before {
 }
 
 #database-structure > li > ul {
-  color: var(--text-primary);
+  color: var(--text-secondary);
   padding: 0 .5em;
   list-style-type: disc;
 }
@@ -489,6 +507,10 @@ nav a:first-of-type {
   display: block;
 }
 
+#table-limiter td {
+  color: var(--text-secondary);
+}
+
 textarea:focus, input:focus, p:focus {
   outline: none;
 }
@@ -528,6 +550,29 @@ select {
   background-color: #ac6aef;
   background-image: linear-gradient(#ac6aef, #681fe6);
   cursor: pointer;
+}
+
+div#data-holder { 
+  overflow-y: scroll;
+  position: relative;
+  height: 100%;
+  border-radius: 10px;
+  /* box-shadow: 0 0 10px #00000025; */
+  margin: 1em 0;
+
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start !important;
+}
+
+#data-holder table {
+  box-shadow: 0 0 10px #00000025;
+}
+
+#table-view {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 10em);
 }
 
 #table-view button {
@@ -583,6 +628,7 @@ select {
 
 #table-view td {
   position: relative;
+  color: var(--text-secondary);
 }
 
 .options-icon {
@@ -595,6 +641,7 @@ select {
   border-bottom-left-radius: 10px;
   color: var(--text-highlight);
   background-color: var(--bg-darker);
+  width: calc(100% - 2em);
 }
 
 .table-no-data-footer p {
@@ -606,7 +653,18 @@ select {
 }
 
 #table-view table {
-  margin-bottom: 0;
+  /* position: absolute; */
+  /* height: 100%; */
+  top: 0;
+  margin: 0;
+}
+
+#table-view th {
+  position: sticky;
+  top: 0px;
+  background-color: var(--bg-lighter-opaque);
+  z-index: 10;
+  white-space: nowrap;
 }
 
 #table-view div {
@@ -638,6 +696,10 @@ table {
   border-radius: 10px;
   margin: 0.5em 0;
   border-collapse:collapse
+}
+
+.text-secondary {
+  color: var(--text-secondary)
 }
 
 th {
@@ -720,7 +782,6 @@ input[type='text'] {
 
 input[type='checkbox'] {
   accent-color: orange;
-  opacity: .5;
 }
 
 main {
@@ -832,7 +893,7 @@ body {
 }
 
 body {
-  font-family: 'Inconsolata', 'Cousine', monospace;
+  font-family: 'Inconsolata', 'Cousine', 'Noto Sans Mono', monospace, sans-serif;
 }
 
 h1, h2, h3, h4, select, #table-view > div > p {
@@ -852,8 +913,8 @@ h1, h2, h3, h4, select, #table-view > div > p {
 }
 
 .yes {
-  background-color: greenyellow;
-  background-image: linear-gradient(#d2ff00, #04f392);
+  background-color: #48e985;
+  background-image: linear-gradient(#48e985, #2a8a3c);
 }
 
 .no {
@@ -907,7 +968,8 @@ dialog::backdrop {
 }
 
 dialog button {
-  outline: none
+  outline: none;
+  margin-bottom: 0;
 }
 
 dialog[open] {

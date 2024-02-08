@@ -1,0 +1,84 @@
+:root {
+  --bg-primary: rgb(227 224 208);
+  --bg-darker: rgb(75 70 63 / 22%);
+  --bg-darker-opaque: rgb(20, 20, 20);
+  --bg-lighter-opaque: rgb(255, 255, 255);
+  --bg-lighter: rgb(255 255 255 / 50%);
+  --tbl-row-one: rgb(20 20 20);
+  --tbl-tow-two: rgb(22 25 26);
+  --text-primary: rgb(70 70 70);
+  --text-lighter: rgb(124, 124, 124);
+  --text-highlight: rgb(0 0 0);
+  --border-primary: rgb(194 194 194);
+  --text-secondary: rgb(87 86 86)
+}
+
+#add-table-options p:nth-of-type(1) {
+  color: #0061ff;
+}
+
+#add-table-options p:nth-of-type(2) {
+  color: #ff5d00;
+}
+
+button {
+  color: var(--text-highlight);
+  box-shadow: 0 0 10px #0000002b;
+}
+
+#add-new-row {
+  color: #0a7610;
+}
+
+#delete-selected {
+  color: #a70000;
+}
+
+#save-changes {
+  color: #a94500;
+}
+
+#add-new-row {
+  color: #004c7d;
+}
+
+#select-all {
+  color: #004d00;
+}
+
+#data-options > ul {
+  padding: 0;
+  background-color: var(--bg-darker-opaque);
+  background-color: rgb(165 162 148);
+  box-shadow: -3px 3px 10px #00000020;
+  overflow: hidden;
+}
+
+#data-options li {
+  padding-left: 40px;
+}
+
+#data-options li:hover {
+  background-color: var(--bg-darker);
+}
+
+#logo img {
+  filter: invert(1);
+}
+
+dialog {
+  background-color: var(--bg-primary);
+  background-image: linear-gradient(var(--bg-primary), var(--bg-darker));
+}
+
+#row-builder th {
+  background-color: var(--bg-lighter-opaque);
+}
+
+#table-view th:not(:first-of-type) p::after {
+  background: transparent url(../images/arrow-sort-light.svg) no-repeat;
+}
+
+#preferences-link {
+  color: #000000;
+}

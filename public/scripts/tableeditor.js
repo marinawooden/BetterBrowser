@@ -38,6 +38,8 @@
       newSelectOption.value = `Column ${qsa("#row-builder tr").length - 1}`;
       newSelectOption.textContent = `Column ${qsa("#row-builder tr").length - 1}`;
       id("pk").appendChild(newSelectOption);
+
+      responsiveDataViewColumns(qs("#row-builder"))
     });
 
     // Save changes function
@@ -361,7 +363,7 @@
     fkInputHolder.appendChild(fkInput);
     
     row.append(
-      closeButton(),
+      closeButton(column),
       nameHolder,
       typeHolder,
       checkBox("nn", pk, ai, constraints?.nn),
@@ -428,7 +430,10 @@
    */
   function updateSelectionName(elem) {
     let newName = elem.textContent;
-    let toChangeIndex = [...elem.parentNode.children].indexOf(elem);
+    let rows = [...elem.closest("tr").parentNode.querySelectorAll("tr")];
+    let toChangeIndex = rows.length - rows.indexOf(elem.closest("tr")) - 1;
+
+    console.log(toChangeIndex);
 
     id("pk").children[toChangeIndex].textContent = newName;
     id("pk").children[toChangeIndex].value = newName;
@@ -473,7 +478,7 @@
    * from a table
    * @returns A close button
    */
-  function closeButton() {
+  function closeButton(colName) {
     let closeHolder = document.createElement("td");
     let closeButton = document.createElement("button");
     let closeIcon = document.createElement("img");
@@ -483,8 +488,17 @@
 
     // closeButton.addEventListener("click", deleteColFromTable);
     closeButton.addEventListener("click", function () {
-      this.closest("tr").remove();
-      hasChanges = true;
+      const deleteCol = () => {
+        this.closest("tr").remove();
+        hasChanges = true;
+      }
+
+      betterModal(
+        "Are you sure you want to remove `" + colName + "`?",
+        "This will remove all values stored in that column",
+        deleteCol
+      )
+      
     });
 
     closeButton.appendChild(closeIcon);
@@ -589,6 +603,45 @@
   function handleError(err) {
     console.error(err);
     betterPopup("An Error Occurred :-(", err.message);
+  }
+
+  function betterModal(title, text, callback, btnYes = "Yes", btnNo = "No") {
+    let popup = document.createElement("dialog");
+    let tt = document.createElement("p");
+    tt.classList.add("popup-title");
+
+    let dt = document.createElement("p");
+    
+    tt.textContent = title;
+    dt.textContent = text;
+
+    popup.id = "disco-2001";
+    let buttonHolder = document.createElement("div");
+    buttonHolder.classList.add("side-by-side")
+
+
+    let yesBtn = document.createElement("button");
+    yesBtn.classList.add("yes");
+
+    yesBtn.textContent = btnYes;
+    yesBtn.addEventListener("click", () => {
+      callback();
+      popup.remove();
+    });
+
+    let noBtn = document.createElement("button");
+    noBtn.classList.add("no");
+
+    noBtn.textContent = btnNo;
+    noBtn.addEventListener("click", () => {
+      popup.remove();
+    });
+
+    buttonHolder.append(yesBtn, noBtn);
+
+    popup.append(tt, dt, buttonHolder);
+    qs("body").appendChild(popup);
+    popup.showModal();
   }
 
   function betterPopup(title, text, btnText = "Dismiss") {

@@ -2,7 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 
 const path = require('path')
 const env = process.env.NODE_ENV || 'production';
-const OFFSET = 10;
+const OFFSET = 20;
 const os = require('os');
 
 const sqlite3 = require('sqlite3');
@@ -186,6 +186,8 @@ ipcMain.handle("add-new-rows", async (event, ...args) => {
     let placeholderString = `(${columnNames.map(() => "?")})`;
     let query = `INSERT INTO ${viewingTable} (${formatColumns(columnNames)}) VALUES ${columnValues.map(() => placeholderString)}`;
 
+    console.log(query);
+
     await previewDB.conn.exec("BEGIN TRANSACTION;\n");
     await previewDB.conn.run(query, columnValues.flat(1));
     await previewDB.conn.exec("COMMIT;")
@@ -212,8 +214,6 @@ ipcMain.handle("get-fk-violations", async (event, ...args) => {
 
     let violations = await previewDB.conn.all("PRAGMA foreign_key_check");
     let foreignKeyNames = await previewDB.conn.all(`PRAGMA foreign_key_list('${args[0]}')`);
-    // console.log(violations);
-    // console.log(foreignKeyNames);
 
     return {
       "type": "success",
@@ -243,7 +243,7 @@ ipcMain.handle("add-dataview-changes", async (event, ...args) => {
     let pk = args[3];
     let pkValue = args[4];
 
-    if (!table || !modifiedColumn || !value || !pk || !pkValue || !db || !previewDB.conn) {
+    if (!table || !modifiedColumn || !value || !pk || !db || !previewDB.conn) {
       throw new Error("Missing required arguments!");
     }
 
@@ -262,6 +262,7 @@ ipcMain.handle("add-dataview-changes", async (event, ...args) => {
       "type": "success"
     }
   } catch (err) {
+    console.log(err);
     if (err.message === "fk") {
       let violations = await previewDB.conn.all("PRAGMA foreign_key_check");
       let foreignKeys = await previewDB.conn.all(`PRAGMA foreign_key_list('${args[0]}')`);
@@ -287,6 +288,11 @@ ipcMain.handle("add-dataview-changes", async (event, ...args) => {
         "type": "err",
         "detail": err.code,
         "error": "too fast",
+      }
+    } else if (/Missing required arguments!/g.test(err.message)) {
+      return {
+        "type": "err",
+        "error": err.message,
       }
     } else {
       await previewDB.conn.exec("ROLLBACK;")
@@ -479,7 +485,6 @@ ipcMain.handle("search-table", async (event, ...args) => {
 
       sqlquery += `LIMIT ${page * OFFSET}, ${OFFSET}`;
 
-      console.log(sqlquery);
       let res = await previewDB.conn.all(sqlquery);
 
       return {
@@ -525,6 +530,10 @@ ipcMain.handle("create-from-csv", async (event, ...args) => {
       throw new Error("No filepath was specified");
     }
 
+    // let query = "BEGIN TRANSACTION;\n";
+    await previewDB.conn.exec("BEGIN TRANSACTION;");
+    await db.exec("BEGIN TRANSACTION;")
+
     const records = await processCSVFile(args[1], args[2]);
     let colNames = args[2] ? Object.keys(records[0]) : args[3];
     
@@ -532,7 +541,10 @@ ipcMain.handle("create-from-csv", async (event, ...args) => {
       let value = records[1][Object.keys(records[0])[i]];
       return {
         name: col,
-        type: /^[0-9]*$/.test(value) ? "INTEGER" : /^[0-9]*\.[0-9]*$/.test(value) ? "REAL" : "TEXT"
+        type:
+        /^[0-9]+$/.test(value) ? "INTEGER" :
+        /^[0-9]*\.[0-9]+$/.test(value) ? "REAL" : 
+        /^[A-Za-z\-\(\)\+\-\*\&\#\@!+\/\\,.]+$/.test(value) ? "TEXT" : "BLOB"
       }
     });
 
@@ -540,17 +552,15 @@ ipcMain.handle("create-from-csv", async (event, ...args) => {
       return `\n"${e.name}" ${e.type}`
     });
 
-    creationStmt.push('\nPRIMARY KEY("id")');
+    creationStmt.push(`\nPRIMARY KEY("${args[4]}")`);
 
-    let query = "BEGIN TRANSACTION;\n";
-    query += `\nCREATE TABLE "${args[0]}" (${creationStmt.toString()}\n);`
+    let query = `\nCREATE TABLE "${args[0]}" (${creationStmt.toString()}\n);`
 
     let insertStatements = records.map((row) => {
-      return `\nINSERT INTO "${args[0]}" (${colNames.map((e) => e.name).toString()}) VALUES (${formatColumns(Object.values(row))})`
+      return `\nINSERT INTO "${args[0]}" (${colNames.map((e) => e.name).toString()}) VALUES (${formatColumns(Object.values(row), '"')})`
     });
 
     query += insertStatements.join(";");
-
      
     await previewDB.conn.exec(query);
     await db.exec(query);
@@ -567,9 +577,10 @@ ipcMain.handle("create-from-csv", async (event, ...args) => {
       "type": "success"
     }
   } catch (err) {
-    await previewDB.conn("ROLLBACK;");
+    console.error(err);
+    await previewDB.conn.exec("ROLLBACK;");
     await db.exec("ROLLBACK;");
-     
+
     return {
       "type": "err",
       "err": err
@@ -764,23 +775,18 @@ ipcMain.handle('update-table', async (event, ...args) => {
     let newColNames = args[2];
     let defaults = args[3].reverse();
 
-    console.log(creationStmt);
-
     if (!creationStmt || !newName || !newColNames || !defaults) {
       throw new Error("Missing required arguments");
     }
 
-    console.log(newColNames);
     let ogColumns = (await db.all(`SELECT name FROM pragma_table_info("${editingTable}")`))
 
     if (newColNames.length < ogColumns.length) {
       // columns have been removed
       ogColumns = ogColumns.filter((col) => {
-        console.log(col.name)
         return newColNames.includes(`"${col.name}"`)
       });
 
-      console.log(ogColumns);
     }
 
     
@@ -788,26 +794,22 @@ ipcMain.handle('update-table', async (event, ...args) => {
       return defaults[i] ? `COALESCE(\`${col.name}\`, "${defaults[i].replace(/'/g, "''")}")` : `\`${col.name}\``;
     });
 
-    console.log(defaults);
-
     for (let i = 0; i < (newColNames.length - ogColumns.length); i++) {
       ogColumns.push(defaults[i + ogColumns.length] ? `TEXT("${defaults[i + ogColumns.length]}")` : "NULL")
     }
+
+    ogColumns = ogColumns.reverse()
 
     //  
     await db.exec("BEGIN TRANSACTION;");
     await previewDB.conn.exec("BEGIN TRANSACTION;");
     let tmpname = `"${Date.now()}"`;
 
-    console.log(newColNames);
-
     let query = `\nCREATE TABLE ${tmpname} (\n${creationStmt}\n);`;
-    query += `\nINSERT INTO ${tmpname} (${newColNames}) SELECT ${ogColumns} FROM \`${editingTable}\`;`;
+    query += `\nINSERT INTO ${tmpname} (${newColNames}) SELECT ${ogColumns.reverse()} FROM \`${editingTable}\`;`;
     query += `\nDROP TABLE "${editingTable}";`;
     query += `\nALTER TABLE ${tmpname} RENAME TO \`${newName}\`;`;
     query += `\nCOMMIT;`;
-
-    console.log(query);
 
      
     await db.exec(query);
@@ -839,9 +841,11 @@ ipcMain.handle('update-table', async (event, ...args) => {
  * @returns String of quotes comma-separated column names
  */
 function formatColumns(colnames, separator = '"') {
+
   ans = "";
   colnames.forEach((name, i) => {
-    ans += `${separator}${name}${(i + 1) < colnames.length ? `${separator}, ` : separator}`;
+    let betterName = name.replace(new RegExp(separator, "g"), '');
+    ans += `${separator}${betterName}${(i + 1) < colnames.length ? `${separator}, ` : separator}`;
   });
 
   return ans;
@@ -1028,20 +1032,20 @@ ipcMain.handle('add-empty-row', async (event, ...args) => {
 
       if (col.pk === 1 && isAutoincrement) {
         let lastRecord = await previewDB.conn.get(`SELECT COUNT(*) as count FROM \`${table}\``);
-        // console.log(lastRecord);
         return lastRecord.count + 2;
       }
 
       return col.dflt_value ? col.dflt_value.replace(/"/g, "") : col.notnull === 1 ? DEFAULTS[col.type] || "`-`" : null;
     }));
 
-    console.log(defValues)
-    console.log(`INSERT INTO \`${table}\` (${formatColumns(colNames, '`')}) VALUES (${defValues.map(() => "?")});`);
+    console.log(defValues);
 
     await previewDB.conn.exec("BEGIN TRANSACTION;")
     let pk = (await db.all(`PRAGMA table_info(\`${table}\`)`)).find((col) => col.pk === 1).name;
     let res = await previewDB.conn.run(`INSERT INTO \`${table}\` (${formatColumns(colNames, '`')}) VALUES (${defValues.map(() => "?")});`, defValues);
     let lastRecord = await previewDB.conn.get(`SELECT * FROM \`${table}\` WHERE ${pk} = ?`, res.lastID);
+
+    console.log(res);
 
     await previewDB.conn.exec("COMMIT;");
     
@@ -1174,7 +1178,7 @@ ipcMain.handle('get-table-meta', async (event, ...args) => {
       }
 
       let getCreateStmt = "SELECT * FROM sqlite_master WHERE type = 'table' AND name = ?";
-      let isAutoincrement = "SELECT * FROM sqlite_master WHERE type = 'table' AND name = ? AND sql LIKE '%AUTOINCREMENT%'";
+      let isAutoincrementStmt = "SELECT * FROM sqlite_master WHERE type = 'table' AND name = ? AND sql LIKE '%AUTOINCREMENT%'";
       let results = await previewDB.conn.get(getCreateStmt, tblname);
 
       if (results) {
@@ -1182,6 +1186,11 @@ ipcMain.handle('get-table-meta', async (event, ...args) => {
         let getPk = 'PRAGMA table_info("' + tblname + '")';
         let columns = await previewDB.conn.all(getPk);
         let pk = columns.find((col) => col.pk === 1);
+        let isAutoincrement = await previewDB.conn.get(isAutoincrementStmt, tblname)
+
+
+        console.log("IS AUTOINCREMENT")
+        console.log(isAutoincrement);
 
         return {
           "name": tblname,
@@ -1261,7 +1270,17 @@ ipcMain.handle('view-data', async (event, ...args) => {
 
     // TODO: SQL INJECTION PART 2
     let columns = await previewDB.conn.all(`SELECT name FROM pragma_table_info("${table}")`);
-    let query = `SELECT * FROM \`${table}\``; 
+    let pk = (await previewDB.conn.all(`PRAGMA table_info(\`${table}\`)`)).find((col) => col.pk === 1).name;
+    console.log("PK: " + pk);
+
+    columns.sort((a, b) => {
+      if (a.name === pk) {
+        return -1
+      }
+      return 1;
+    });
+
+    let query = `SELECT ${formatColumns(columns.map((col) => col.name))} FROM \`${table}\``; 
     
     if (orderBy) {
       query += ` ORDER BY \`${orderBy}\` ${dir}`;
@@ -1269,9 +1288,10 @@ ipcMain.handle('view-data', async (event, ...args) => {
 
     query += ` LIMIT ${page * OFFSET}, ${OFFSET}`;
 
-    console.log(query);
-
     let tableData = await previewDB.conn.all(query);
+
+
+    console.log(tableData);
 
     return {
       "columns": columns,
@@ -1388,7 +1408,6 @@ ipcMain.handle('open-database', async (event, ...args) => {
         "res": currentDBPath
       }
     } else {
-      console.log("RETURNING NOTHING")
       return {
         "type": "neutral",
         "err": "Nothing Selected"

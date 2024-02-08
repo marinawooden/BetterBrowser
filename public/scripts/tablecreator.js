@@ -399,7 +399,14 @@ const ipc = require('electron').ipcRenderer;
     }
 
     qs(`#pk option[value='${rowName}']`).remove();
-    qs(`#rows .${rowName}`).remove();
+    if (rowName) {
+      qs(`#rows .${rowName}`).remove();
+    } else {
+      console.log([...qsa(`#rows .col-name`)].find((col) => col.textContent == '""'));
+      // find row with no name
+      [...qsa(`#rows .col-name`)].find((col) => col.textContent == '""')?.remove();
+    }
+    
     row.remove();
 
     checkIfHasRows();

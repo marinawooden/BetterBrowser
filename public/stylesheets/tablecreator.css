@@ -99,6 +99,8 @@ table p:focus {
   font-family: monospace;
   color: salmon;
   cursor: pointer;
+  box-shadow: none;
+  filter: drop-shadow(0 0 10px black);
 }
 
 .remove-row img {
@@ -146,7 +148,7 @@ table p:focus {
 table select {
   padding: 0;
   margin: 3px;
-  font-family: 'Inconsolata', monospace;
+  font-family: 'Inconsolata', 'Noto Sans Mono', monospace, sans-serif;
   color: var(--text-primary)
 }
 

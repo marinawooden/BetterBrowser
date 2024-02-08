@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron-forge start",
     "package": "electron-forge package",
-    "make": "electron-forge make"
+    "make": "APPLE_TEAM_ID=V4U2495S97 APPLE_PASSWORD=vglc-dhir-ogcc-khbx APPLE_ID=mwoode@uw.edu electron-forge make"
   },
   "build": {
     "productName": "BetterBrowser",
@@ -24,7 +24,7 @@
     "@electron-forge/maker-wix": "^6.4.2",
     "@electron/osx-sign": "^1.0.5",
     "csv-parse": "^5.5.0",
-    "dotenv": "^16.3.1",
+    "electron-packager": "^17.1.2",
     "electron-squirrel-startup": "^1.0.0",
     "electron-store": "^8.1.0",
     "electron-wix-msi": "^5.0.0",
@@ -40,6 +40,7 @@
     "@electron-forge/maker-zip": "^6.4.2",
     "@electron-forge/plugin-auto-unpack-natives": "^6.4.2",
     "@electron/notarize": "^2.1.0",
+    "dotenv": "^16.3.1",
     "electron": "^24.8.8",
     "electron-reload": "^2.0.0-alpha.1",
     "electron-reloader": "^1.2.3"

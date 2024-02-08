@@ -5,6 +5,7 @@
 
   function init() {
     getData();
+    
     id("first-row").addEventListener("change", getData);
     id("separator").addEventListener("input", function() {
       if (this.value.trim() !== "") {
@@ -27,18 +28,24 @@
         await createTable();
       }
     });
+
+    window.addEventListener("resize", () => {
+      responsiveDataViewColumns(qs("#table-preview"))
+    });
   };
 
   async function createTable() {
     try {
-      console.log([...qsa("#table-preview th")]);
       let colnames = [...qsa("#table-preview th")].map((elem) => elem.textContent);
-      await ipc.invoke("create-from-csv", id("table-name").value || "Table 1", id("separator").value, id("first-row").checked, colnames);
-
-      // ipc.once("edits-complete", async () => {
-      //   await populateDbView();
-      //   await populateDataViewerOptions();
-      // });
+      let creation = await ipc.invoke(
+        "create-from-csv",
+        id("table-name").value || "Table 1", id("separator").value,
+        id("first-row").checked, colnames,
+        id("primary-key").value
+      );
+      if (creation.type === "err") {
+        throw new Error(creation.err);
+      }
     } catch (err) {
       handleError(err);
     }
@@ -94,6 +101,22 @@
 
       qs("#table-preview tbody").appendChild(rowElem);
     });
+
+    responsiveDataViewColumns(qs("#table-preview"));
+  }
+
+  function responsiveDataViewColumns(table) {
+    let tableWidth = table?.parentNode?.offsetWidth - 300;
+    let numColumns = table?.querySelectorAll("th").length - 1;
+
+    let content = table?.querySelectorAll("p");
+
+    if (content) {
+      [...content].forEach((elem) => {
+        elem.style.maxWidth = `${(tableWidth / numColumns)}px`;
+        elem.style.minWidth = `${(tableWidth / numColumns)}px`;
+      });
+    }
   }
 
   function qs(query) {

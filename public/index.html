@@ -9,8 +9,9 @@
   <script src="./scripts/renderer.js" defer></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;600&family=Schibsted+Grotesk&family=Cousine&family=Wix+Madefor+Display:wght@500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;600&family=Noto+Sans+Mono&family=Schibsted+Grotesk&family=Ubuntu&family=Wix+Madefor+Display:wght@500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./stylesheets/index.css">
+  <link rel="stylesheet" href="./stylesheets/lightmode.css">
   <title>BetterBrowser v.1.0</title>
 </head>
 <body class="d-flex">
@@ -22,6 +23,9 @@
     <div id="actions">
       <button id="add-database-button">+ Create New Database</button>
       <button id="open-database-button">Open Existing Database</button>
+      <a id="preferences-link" href=".">
+        Preferences
+      </a>
     </div>
   </aside>
   <section>
@@ -35,7 +39,7 @@
     <main>
       <section id="database" class="active">
         <h2>Database Structure</h2>
-        <div id="table-schema-view">
+        <div id="table-schema-view" class="text-secondary">
           <p>No database is currently open, please create one or open one from a file</p>
         </div>
         <div class="side-by-side">
@@ -81,7 +85,7 @@
               </ul>
             </div>
           </div>
-          <p>No database is currently open, please create one or open one from a file</p>
+          <p class="text-secondary">No database is currently open, please create one or open one from a file</p>
         </div>
         <div id="pagination-holder">
           <div id="table-page-toggle">
@@ -93,7 +97,7 @@
       <section id="query-tester">
         <button id="sql-executor">Execute SQL</button>
         <h2>SQL Executor</h2>
-        <p>Current Database: <span class="current-db-name"></span></p>
+        <p class="text-secondary">Current Database: <span class="current-db-name"></span></p>
         <div>
           <h3>Query:</h3>
           <textarea id="sql-input" placeholder="SELECT * FROM demo"></textarea>

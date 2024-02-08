@@ -15,7 +15,7 @@ a {
 }
 
 body {
-  font-family: 'Inconsolata', monospace;
+  font-family: 'Inconsolata', 'Noto Sans Mono', monospace, sans-serif;
   background-color: var(--bg-darker);
   /* background-image: radial-gradient(circle at bottom, rgb(24 24 42), rgb(14 11 11)); */
   background-size: 100vw 100vh;
