@@ -175,6 +175,9 @@ async function processCSVFile(delimiter = ",", firstRowIsColumns) {
 
 ipcMain.handle("add-new-rows", async (event, ...args) => {
   try {
+
+    console.log("HERE!")
+
     let viewingTable = args[0];
     let columnValues = args[1];
     let columnNames = args[2];
@@ -185,8 +188,6 @@ ipcMain.handle("add-new-rows", async (event, ...args) => {
 
     let placeholderString = `(${columnNames.map(() => "?")})`;
     let query = `INSERT INTO ${viewingTable} (${formatColumns(columnNames)}) VALUES ${columnValues.map(() => placeholderString)}`;
-
-    console.log(query);
 
     await previewDB.conn.exec("BEGIN TRANSACTION;\n");
     await previewDB.conn.run(query, columnValues.flat(1));
@@ -262,7 +263,6 @@ ipcMain.handle("add-dataview-changes", async (event, ...args) => {
       "type": "success"
     }
   } catch (err) {
-    console.log(err);
     if (err.message === "fk") {
       let violations = await previewDB.conn.all("PRAGMA foreign_key_check");
       let foreignKeys = await previewDB.conn.all(`PRAGMA foreign_key_list('${args[0]}')`);
@@ -693,26 +693,6 @@ ipcMain.handle("get-constraints", async () => {
       }
     });
 
-    // let constraints = sql.sql.split("\n")
-
-    // console.log(constraints);
-
-    // constraints = constraints.filter((sentence) => /^["']?\w+ .*[^\)\()]$/mg.test(sentence.trim()))
-
-    // console.log(constraints)
-
-    // constraints = constraints.map((col) => {
-    //   let nn = /NOT NULL/.test(col)
-    //   let def = col.match(/(?<=DEFAULT ").*(?=")/)
-    //   let u = /UNIQUE/.test(col)
-
-    //   return {
-    //     "nn": nn,
-    //     "default": def ? def[0] : def,
-    //     "u": u
-    //   }
-    // });
-
     return {
       "type": "success",
       "results": cols
@@ -1038,15 +1018,11 @@ ipcMain.handle('add-empty-row', async (event, ...args) => {
       return col.dflt_value ? col.dflt_value.replace(/"/g, "") : col.notnull === 1 ? DEFAULTS[col.type] || "`-`" : null;
     }));
 
-    console.log(defValues);
-
     await previewDB.conn.exec("BEGIN TRANSACTION;")
     let pk = (await db.all(`PRAGMA table_info(\`${table}\`)`)).find((col) => col.pk === 1).name;
     let res = await previewDB.conn.run(`INSERT INTO \`${table}\` (${formatColumns(colNames, '`')}) VALUES (${defValues.map(() => "?")});`, defValues);
-    let lastRecord = await previewDB.conn.get(`SELECT * FROM \`${table}\` WHERE ${pk} = ?`, res.lastID);
-
-    console.log(res);
-
+    // let lastRecord = await previewDB.conn.get(`SELECT * FROM \`${table}\` WHERE ${pk} = ?`, res.lastID);
+    let lastRecord = await previewDB.conn.get(`SELECT * FROM \`${table}\` LIMIT 1 OFFSET ?;`, res.lastID - 1);
     await previewDB.conn.exec("COMMIT;");
     
     // get foreign key conflicts
@@ -1068,7 +1044,6 @@ ipcMain.handle('add-empty-row', async (event, ...args) => {
       "fkconflicts": conflicts
     }
   } catch (err) {
-    console.log(err);
     await previewDB.conn.exec("ROLLBACK;");
     return {
       "type": "err",
@@ -1188,10 +1163,6 @@ ipcMain.handle('get-table-meta', async (event, ...args) => {
         let pk = columns.find((col) => col.pk === 1);
         let isAutoincrement = await previewDB.conn.get(isAutoincrementStmt, tblname)
 
-
-        console.log("IS AUTOINCREMENT")
-        console.log(isAutoincrement);
-
         return {
           "name": tblname,
           "sql": results.sql,
@@ -1271,7 +1242,6 @@ ipcMain.handle('view-data', async (event, ...args) => {
     // TODO: SQL INJECTION PART 2
     let columns = await previewDB.conn.all(`SELECT name FROM pragma_table_info("${table}")`);
     let pk = (await previewDB.conn.all(`PRAGMA table_info(\`${table}\`)`)).find((col) => col.pk === 1).name;
-    console.log("PK: " + pk);
 
     columns.sort((a, b) => {
       if (a.name === pk) {
@@ -1289,9 +1259,6 @@ ipcMain.handle('view-data', async (event, ...args) => {
     query += ` LIMIT ${page * OFFSET}, ${OFFSET}`;
 
     let tableData = await previewDB.conn.all(query);
-
-
-    console.log(tableData);
 
     return {
       "columns": columns,
@@ -1456,7 +1423,7 @@ ipcMain.handle('add-database', async () => {
       };
     }
   } catch (err) {
-    console.log(err);
+    ;
     return {
       "type": "err",
       "error": err

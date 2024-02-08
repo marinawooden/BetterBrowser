@@ -169,6 +169,9 @@
       if (res.type === "err") {
         throw new Error(res.error);
       }
+
+      console.log(res.results);
+
       showSearchResults(res.results);
     } catch (err) {
       console.error(err);
@@ -179,7 +182,11 @@
   function showSearchResults(results) {
     qsa("#table-view table tr:not(:first-of-type)").forEach((row) => row.remove());
 
+    // need to make sure results are in the right order
+    let order = getColumnNames();
+
     results.forEach((result) => {
+      console.log(result);
       let row = document.createElement("tr");
       let pk = id("pk").textContent;
 
@@ -195,7 +202,7 @@
       checkbox.addEventListener("click", recordCheck)
       row.append(checkboxCol);
       
-      [...Object.keys(result)].forEach((col, i) => {
+      order.forEach((col, i) => {
         let content = document.createElement("td");
         let contentHolder = document.createElement("p")
 
@@ -302,6 +309,7 @@
   }
 
   function getNewColumnValues() {
+    console.log(qsa(".new-row"));
     return [...qsa(".new-row")].map((row) => {
       let cells = [...row.querySelectorAll("td")];
       cells.shift();  
@@ -328,7 +336,7 @@
       let res;
 
       if (columnValues.length > 0) {
-        res = await ipc.invoke("add-new-rows", viewingTable, getNewColumnValues(), getColumnNames(), force);
+        res = await ipc.invoke("add-new-rows", viewingTable, getNewColumnValues(), getColumnNames());
         if (res.type === "err") {
           if (res.detail === "SQLITE_CONSTRAINT") {
             throw new Error("Please resolve all foreign key conflicts before saving!");
@@ -381,13 +389,11 @@
       qs("#table-view .table-no-data-footer")?.remove();
 
       let row = document.createElement("tr");
-      console.log(res);
 
       row.id = res.result[res.pk];
-      let fkviolations = res.fkconflicts?.map((e) => e.rowid + e.col);
+      row.classList.add("new-row");
 
-      console.log(res);
-      console.log(fkviolations);
+      let fkviolations = res.fkconflicts?.map((e) => e.rowid + e.col);
 
       ["", ...Object.keys(res.result)].forEach((col, i) => {
         let cell = document.createElement("td");
@@ -430,17 +436,17 @@
   }
 
   function ensureInFrame(evt) {
-    // console.log(this.getBoundingClientRect());
+    // ;
     const vw = qs("body").getBoundingClientRect();
     const pos = this.getBoundingClientRect();
 
     // right overflow
-    console.log(pos.width + pos.x + 50);
-    console.log(vw);
+    ;
+    ;
 
     if ((pos.width + pos.x + 50) > vw.width) {
       let clip = vw.width - (pos.width + pos.x);
-      console.log(clip);
+      ;
       this.parentNode.querySelector("div").style.marginLeft = `-${clip}px`;
       this.classList.add("overflowed");
     }
@@ -485,13 +491,13 @@
         // PROBLEM: IF there's an error in some other column, the commented
         // implementation will highlight the current column as well- even if
         // it's not the one causing the issue
-        console.log(res);
+        ;
         if (res.type === "err" && res.error !== "too fast") {
           
           let violatingIds = res.violations?.map((row) => row.rowid + row.from);
           if (res.detail === "FOREIGN_KEY") {
             let colName = qs("#table-view tr").children[[...e.target.closest("tr").children].indexOf(e.target.parentNode)].textContent;
-            console.log(e.target.closest("tr").id + colName);
+            ;
             if (violatingIds.includes(e.target.closest("tr").id + colName)) {
               // foreign key violation
               makeInvalid(e.target)
@@ -871,7 +877,7 @@
         throw new Error(tables.error)
       }
 
-      console.log(tables);
+      ;
       return {
         "db": tables["db"],
         "tables": tables["tables"].filter((table) => table.tbl !== "sqlite_sequence")
@@ -899,14 +905,14 @@
       let currentDb = await (async () => {
         let res = ipc.invoke('open-database', dbPath);
         ipc.once("creating-database", () => {
-          console.log("IS CREATING DATABASe");
+          ;
           loadingScreen();
         });
 
         return res
       })();
       
-      console.log(currentDb);
+      ;
 
       if (currentDb.type === "err") {
         throw new Error(currentDb.err);
@@ -1044,7 +1050,7 @@
       id("search-table").value = "";
 
       let tableData = await getDataFromTable(table, orderBy, sortDirection);
-      console.log(tableData);
+      ;
       // todo: use this info to apply the invalid row class to new stuff
       let foreignKeyViolations = await getForeignKeyViolations(table);
       let tableMeta = await ipc.invoke("get-table-meta", table);
@@ -1081,7 +1087,7 @@
         
         columnName.appendChild(columnHolder);
         header.appendChild(columnName);
-        console.log(header);
+        ;
       });
 
       dataViewTable.dataset.ai = tableMeta.isAutoincrement;
@@ -1181,7 +1187,7 @@
   };
 
   function loadMoreTuples() {
-    // console.log(this.)
+    // 
   }
 
   function populateRecentConnections(connections) {
@@ -1246,7 +1252,7 @@
     try {
       let currentDb = await ipc.invoke('add-database');
 
-      console.log(currentDb);
+      ;
 
       if (currentDb.type === "err") {
         throw new Error(currentDb.error);

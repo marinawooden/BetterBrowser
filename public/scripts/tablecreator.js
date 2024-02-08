@@ -402,7 +402,7 @@ const ipc = require('electron').ipcRenderer;
     if (rowName) {
       qs(`#rows .${rowName}`).remove();
     } else {
-      console.log([...qsa(`#rows .col-name`)].find((col) => col.textContent == '""'));
+      ;
       // find row with no name
       [...qsa(`#rows .col-name`)].find((col) => col.textContent == '""')?.remove();
     }

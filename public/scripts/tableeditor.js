@@ -433,7 +433,7 @@
     let rows = [...elem.closest("tr").parentNode.querySelectorAll("tr")];
     let toChangeIndex = rows.length - rows.indexOf(elem.closest("tr")) - 1;
 
-    console.log(toChangeIndex);
+    ;
 
     id("pk").children[toChangeIndex].textContent = newName;
     id("pk").children[toChangeIndex].value = newName;
