@@ -1,8 +1,8 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, nativeTheme } = require('electron');
 
 const path = require('path')
 const env = process.env.NODE_ENV || 'production';
-const OFFSET = 20;
+const OFFSET = 30;
 const os = require('os');
 
 const sqlite3 = require('sqlite3');
@@ -172,6 +172,43 @@ async function processCSVFile(delimiter = ",", firstRowIsColumns) {
   await finished(parser);
   return records;
 }
+
+ipcMain.handle("change-theme-preference", async () => {
+  let prefersDarkMode = await store.get('prefers-dark');
+  if (prefersDarkMode !== undefined) {
+    console.log(prefersDarkMode);
+    await store.set('prefers-dark', !prefersDarkMode)
+  }
+  
+  return prefersDarkMode ? "dark" : "light"
+});
+
+ipcMain.handle("get-theme-preference", async () => {
+  try {
+    let localNativeTheme = await store.get('prefers-dark');
+
+    if (localNativeTheme !== undefined) {
+      return {
+        "type": "success",
+        "result": localNativeTheme
+      }
+    }
+
+    const theme = nativeTheme.shouldUseDarkColors;
+    await store.set('prefers-dark', theme);
+
+    return {
+      "type": "success",
+      "result": theme
+    }
+  } catch (err) {
+    console.error(err);
+    return {
+      "type": "error",
+      "error": "There was an error on the server!"
+    }
+  }
+});
 
 ipcMain.handle("add-new-rows", async (event, ...args) => {
   try {
@@ -347,6 +384,7 @@ ipcMain.handle("commit-dataview-changes", async (event, ...args) => {
       "type": "success"
     }
   } catch (err) {
+    console.error(err);
     return {
       "type": "err",
       "error": err
@@ -775,7 +813,8 @@ ipcMain.handle('update-table', async (event, ...args) => {
     });
 
     for (let i = 0; i < (newColNames.length - ogColumns.length); i++) {
-      ogColumns.push(defaults[i + ogColumns.length] ? `TEXT("${defaults[i + ogColumns.length]}")` : "NULL")
+      console.log(defaults[i + ogColumns.length]);
+      ogColumns.push(defaults[i + ogColumns.length] ? `CAST("${defaults[i + ogColumns.length]}" AS TEXT)` : "NULL")
     }
 
     ogColumns = ogColumns.reverse()
@@ -902,6 +941,7 @@ ipcMain.handle('delete-table', async (event, ...args) => {
  */
 ipcMain.handle('save-changes', async (event, ...args) => {
   try {
+    console.log("ENTER")
     let table = args[0];
     let columns = args[1];
     let pk = args[2];
@@ -946,7 +986,7 @@ ipcMain.handle('save-changes', async (event, ...args) => {
       "type": "success"
     }
   } catch (err) {
-    //  
+    console.error(err);
     await db.exec("ROLLBACK;");
     await previewDB.conn.exec("ROLLBACK;");
 
@@ -1627,8 +1667,12 @@ app.on('window-all-closed', async () => {
 app.whenReady().then(async () => {
   try {
     if (db) {
+      console.log("REACHED!");
       await db.close()
-      await previewDB.conn.close();
+      await previewDB?.conn?.close();
+
+      db = null;
+      previewDB = {};
     }
 
     createWindow()

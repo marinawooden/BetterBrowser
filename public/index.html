@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;600&family=Noto+Sans+Mono&family=Schibsted+Grotesk&family=Ubuntu&family=Wix+Madefor+Display:wght@500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./stylesheets/index.css">
-  <link rel="stylesheet" href="./stylesheets/lightmode.css">
+  <!-- <link rel="stylesheet" href="./stylesheets/lightmode.css"> -->
   <title>BetterBrowser v.1.0</title>
 </head>
 <body class="d-flex">
@@ -23,9 +23,19 @@
     <div id="actions">
       <button id="add-database-button">+ Create New Database</button>
       <button id="open-database-button">Open Existing Database</button>
-      <a id="preferences-link" href=".">
-        Preferences
-      </a>
+      <div id="preferences-link">
+        <p>
+          Preferences
+        </p>
+        <div>
+          <ul>
+            <li>
+              <input type="checkbox" name="light-mode" id="light-mode">
+              <label for="light-mode">Light Mode</label>
+            </li>
+          </ul>
+        </div>
+      </div>
     </div>
   </aside>
   <section>

@@ -79,6 +79,16 @@ dialog {
   background: transparent url(../images/arrow-sort-light.svg) no-repeat;
 }
 
-#preferences-link {
-  color: #000000;
+#preferences-link > p {
+  color: var(--text-lighter);
+  cursor: pointer;
+  transition: 0.5s ease color;
+}
+
+#preferences-link > p:hover {
+  color: #ff6300
+}
+
+tr:nth-of-type(2n - 1) {
+  background-color: var(--bg-darker);
 }

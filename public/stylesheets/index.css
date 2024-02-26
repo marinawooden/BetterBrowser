@@ -26,11 +26,12 @@ body {
   --bg-lighter-opaque: rgb(41 41 45);
   --tbl-row-one: rgb(20 20 20);
   --tbl-tow-two: rgb(22 25 26);
-  --text-primary: rgb(204 204 204);
+  --text-primary: rgb(153 152 152);
   --text-lighter: rgb(124, 124, 124);
   --text-highlight: rgb(225 225 225);
   --border-primary: rgb(37 38 39);
-  --text-secondary: rgb(128, 128, 128)
+  --text-secondary: rgb(157 157 157);
+  --divider: rgb(255 255 255 / 20%);
 }
 
 #actions {
@@ -167,15 +168,41 @@ th:first-of-type {
   padding-top: 1em;
 }
 
-#preferences-link {
+#preferences-link > p {
   text-decoration: none;
   text-transform: lowercase;
   color: #ff8300;
 }
 
-#preferences-link:hover {
-  transform: scale(1.2);
+#preferences-link > p::before {
+  content: "▶";
+  display: inline-block;
 }
+
+#preferences-link.open > p::before {
+  animation: spin-down 1s forwards;
+}
+
+#preferences-link.closed > p::before {
+  animation: spin-up 1s forwards;
+}
+
+#preferences-link ul {
+  padding: 0;
+  list-style-type: none;
+  display: flex;
+  align-items: center;
+}
+
+#preferences-link li {
+  display: flex;
+  align-items: center;
+}
+
+#preferences-link input[type='checkbox'] {
+  margin-right: 0.5em;
+}
+
 
 #table-page-toggle > *:hover {
   color: var(--text-highlight);
@@ -411,7 +438,7 @@ p.delete:hover {
 hr {
   border: 0;
   height: 1px;
-  background-color: var(--text-primary);
+  background-color: var(--divider);
 }
 
 label {
@@ -672,7 +699,8 @@ div#data-holder {
   align-items: center;
 }
 
-#table-view table p {
+#table-view table p,
+#table-limiter table p {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -737,7 +765,7 @@ th:last-of-type {
 }
 
 tr:nth-of-type(2n - 1) {
-  background-color: var(--bg-lighter);
+  background-color: rgb(26 26 28);
 }
 
 tr:last-of-type td:first-of-type {
@@ -782,6 +810,7 @@ input[type='text'] {
 
 input[type='checkbox'] {
   accent-color: orange;
+  opacity: 0.7;
 }
 
 main {
@@ -996,7 +1025,7 @@ dialog[open] {
   max-width: 100% !important;
 }
 
-
+/** ANIMATIONS **/
 
 @keyframes dialog-entrance {
   from {
@@ -1005,5 +1034,17 @@ dialog[open] {
 
   to {
     opacity: 1
+  }
+}
+
+@keyframes spin-down {
+  to {
+    transform: rotate(90deg);
+  }
+}
+
+@keyframes spin-up {
+  from {
+    transform: rotate(90deg);
   }
 }

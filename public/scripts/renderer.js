@@ -1,7 +1,7 @@
 "use strict";
 (function() {
   const ipc = require('electron').ipcRenderer;
-  const { webFrame } = require('electron');
+  const { webFrame, ipcMain } = require('electron');
 
   const MSG_LOOKUP = {
     "FOREIGN_KEY": "Invalid foreign key",
@@ -12,16 +12,23 @@
   let selectedRows = [];
   let pageViewing = 0;
   let sortingCol;
+  let theme;
 
+  window.addEventListener("DOMContentLoaded", preInit);
   window.addEventListener("load", init);
 
   function init() {
-    webFrame.setZoomFactor(1)
+    webFrame.setZoomFactor(1);
+
+    if (theme === "dark") {
+      showLightMode();
+    }
 
     qsa("header > nav a").forEach((node) => node.addEventListener("click", openView));
     id("data-options-toggler").addEventListener("click", () => id("data-options").classList.toggle("collapsed"));
     id("add-database-button").addEventListener("click", addDatabase);
     id("clear-connections").addEventListener("click", promptForClear);
+    id("light-mode").addEventListener("change", changeTheme)
     id("table-name").addEventListener("change", async (e) => {
       pageViewing = 0;
       selectedRows = [];
@@ -61,6 +68,17 @@
       searchForQuery()
     });
 
+    qs("#preferences-link > p").addEventListener("click", function () {
+      let node = this.parentNode;
+      if (node.classList.contains("open")) {
+        node.classList.add("closed");
+        node.classList.remove("open");
+      } else {
+        node.classList.remove("closed");
+        node.classList.add("open");
+      }
+    })
+
     window.addEventListener('keydown', async (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
@@ -73,6 +91,59 @@
     window.addEventListener("resize", () => {
       responsiveDataViewColumns(qs("#table-view table"))
     });
+  }
+
+  async function changeTheme() {
+    try {
+      let res = await ipc.invoke("change-theme-preference");
+      console.log(res);
+      if (res === "dark") {
+        removeLightMode()
+      } else {
+        showLightMode()
+      }
+      
+      theme = res;
+    } catch (err) {
+
+    }
+  }
+
+  function removeLightMode() {
+    document.head.querySelector('link[rel=stylesheet][href~="stylesheets/lightmode.css"]').remove();
+    id("light-mode").checked = false;
+  }
+
+  // add all light mode attributes
+  function showLightMode() {
+    console.log(id("light-mode"))
+    id("light-mode").checked = true;
+    var link = gen("link");
+
+    link.type = "text/css";
+    link.rel = "stylesheet";
+    link.href = "stylesheets/lightmode.css";
+
+    document.head.appendChild(link);
+  }
+
+  /** Before the page loads, load some stuff about preferences */
+  async function preInit() {
+    theme = await getThemePreference();
+  }
+
+  /** Gets the user's theme preference- either light or dark */
+  async function getThemePreference() {
+    try {
+      let res = await ipc.invoke("get-theme-preference");
+      if (res.type === "error") {
+        throw new Error(res.error)
+      }
+
+      return res.result ? "dark" : "light";
+    } catch (err) {
+      return "light";
+    }
   }
 
   function loadingScreen() {
@@ -170,8 +241,6 @@
         throw new Error(res.error);
       }
 
-      console.log(res.results);
-
       showSearchResults(res.results);
     } catch (err) {
       console.error(err);
@@ -186,7 +255,6 @@
     let order = getColumnNames();
 
     results.forEach((result) => {
-      console.log(result);
       let row = document.createElement("tr");
       let pk = id("pk").textContent;
 
@@ -243,16 +311,17 @@
     }, {});
   }
 
-  function responsiveDataViewColumns(table) {
+  function responsiveDataViewColumns(table, excludeFirst = true, minWidth = '50px') {
     let tableWidth = table?.parentNode?.offsetWidth - 300;
     let numColumns = table?.querySelectorAll("th").length - 1;
+    let colSelecto = excludeFirst ? "tr td:not(:first-of-type) p" : "tr td p";
 
-    let content = table?.querySelectorAll("tr td:not(:first-of-type) p");
+    let content = table?.querySelectorAll(colSelecto);
 
     if (content) {
       [...content].forEach((elem) => {
         elem.style.maxWidth = `${(tableWidth / numColumns)}px`;
-        elem.style.minWidth = `${(tableWidth / numColumns)}px`;
+        elem.style.minWidth = minWidth;
       });
     }
   }
@@ -309,7 +378,6 @@
   }
 
   function getNewColumnValues() {
-    console.log(qsa(".new-row"));
     return [...qsa(".new-row")].map((row) => {
       let cells = [...row.querySelectorAll("td")];
       cells.shift();  
@@ -639,17 +707,20 @@
         if (res.data) {
           // SELECT QUERY PROCESSING
           let table = buildResultsTable(res.data);
+          
           let detailsMessage = document.createElement("p");
           detailsMessage.textContent = `
-          Successfully executed query.
-          ${res.details.numRows} row(s) returned.
-          Took ${res.details.time}ms
+            Successfully executed query.
+            ${res.details.numRows} row(s) returned.
+            Took ${res.details.time}ms
           `;
 
           id("table-limiter").innerHTML = "";
 
           id("query-details").appendChild(detailsMessage);
           id("table-limiter").appendChild(table);
+
+          responsiveDataViewColumns(table, false, '100px');
         } else {
           // INSERT/DELETE/WHATEVER ELSE CASE
           let detailsMessage = document.createElement("p");
@@ -702,8 +773,11 @@
       
       columnNames.forEach((key) => {
         let rowTd = document.createElement("td");
+        let rowCp = document.createElement("p");
 
-        rowTd.textContent = row[key];
+
+        rowCp.textContent = row[key];
+        rowTd.appendChild(rowCp);
 
         rowElem.appendChild(rowTd);
       });
