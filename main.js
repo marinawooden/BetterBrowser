@@ -181,13 +181,11 @@ async function processCSVFile(delimiter = ",", firstRowIsColumns) {
 }
 
 ipcMain.handle("change-theme-preference", async () => {
-  let prefersDarkMode = await store.get("prefers-dark");
-  if (prefersDarkMode !== undefined) {
-    console.log(prefersDarkMode);
-    await store.set("prefers-dark", !prefersDarkMode);
-  }
-
-  return prefersDarkMode ? "dark" : "light";
+  let prefersDarkMode = await getPrefersDark();
+  console.log(prefersDarkMode);
+  await store.set("prefers-dark", !(prefersDarkMode.result));
+  
+  return !(prefersDarkMode.result) ? "dark" : "light";
 });
 
 ipcMain.handle("get-theme-preference", getPrefersDark);

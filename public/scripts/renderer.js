@@ -96,6 +96,8 @@
   }
 
   async function changeTheme() {
+    console.log("FIRED!")
+    
     try {
       let res = await ipc.invoke("change-theme-preference");
       console.log(res);
