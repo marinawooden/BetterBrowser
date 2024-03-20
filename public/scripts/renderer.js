@@ -1,13 +1,16 @@
 "use strict";
 (function() {
   const ipc = require('electron').ipcRenderer;
-  const { webFrame, ipcMain } = require('electron');
+  const { webFrame, ipcMain, ipcRenderer } = require('electron');
 
   const MSG_LOOKUP = {
     "FOREIGN_KEY": "Invalid foreign key",
     "UNIQUE": "Non unique value in unique column",
     "TYPE_MISMATCH": "Unexpected data type"
   }
+
+  // parse the theme regex out to get the key
+  const THEME_ARG_REGEX = new RegExp("^--color-theme=")
   
   let selectedRows = [];
   let pageViewing = 0;
@@ -17,12 +20,11 @@
   window.addEventListener("DOMContentLoaded", preInit);
   window.addEventListener("load", init);
 
+  // once the color scheme is available, set it
+  
+
   function init() {
     webFrame.setZoomFactor(1);
-
-    if (theme === "dark") {
-      showLightMode();
-    }
 
     qsa("header > nav a").forEach((node) => node.addEventListener("click", openView));
     id("data-options-toggler").addEventListener("click", () => id("data-options").classList.toggle("collapsed"));
@@ -129,7 +131,12 @@
 
   /** Before the page loads, load some stuff about preferences */
   async function preInit() {
-    theme = await getThemePreference();
+    let colorThemeParam = window.process.argv.find((e) => THEME_ARG_REGEX.test(e));
+    theme = colorThemeParam.replace(THEME_ARG_REGEX, "");
+    
+    if (theme === "light") {
+      showLightMode()
+    }
   }
 
   /** Gets the user's theme preference- either light or dark */
@@ -450,15 +457,17 @@
   async function addNewRow() {
     try {
       let res = await ipc.invoke("add-empty-row", id("table-name").value);
-      if (res.type === "err") {
-        throw new Error(res.error);
+      if (res.type === "err" || !res) {
+        throw new Error(res?.error || "Couldn't add new row- please contact developer");
       }
 
       qs("#table-view .table-no-data-footer")?.remove();
+      console.log(res);
 
       let row = document.createElement("tr");
 
       row.id = res.result[res.pk];
+     
       row.classList.add("new-row");
 
       let fkviolations = res.fkconflicts?.map((e) => e.rowid + e.col);
@@ -507,10 +516,6 @@
     // ;
     const vw = qs("body").getBoundingClientRect();
     const pos = this.getBoundingClientRect();
-
-    // right overflow
-    ;
-    ;
 
     if ((pos.width + pos.x + 50) > vw.width) {
       let clip = vw.width - (pos.width + pos.x);
@@ -733,6 +738,9 @@
 
           id("table-limiter").textContent = "No rows returned";
           id("query-details").appendChild(detailsMessage);
+
+          // reload the table
+          await populateDbView();
         }
       } catch (err) {
         executorError(err);
@@ -949,9 +957,8 @@
 
       if (tables.type === "err") {
         throw new Error(tables.error)
-      }
+      };
 
-      ;
       return {
         "db": tables["db"],
         "tables": tables["tables"].filter((table) => table.tbl !== "sqlite_sequence")
@@ -967,6 +974,8 @@
       if (tableData.type === "err") {
         throw new Error(tableData.error);
       }
+
+      console.log(tableData);
 
       return tableData;
     } catch (err) {
@@ -1076,6 +1085,7 @@
   async function populateDataViewerOptions() {
     try {
       let tables = await getTables();
+      console.log(tables);
       tables = tables["tables"].map((table) => table.tbl);
 
       id("table-name").innerHTML = "";
@@ -1334,7 +1344,6 @@
         setCurrentDbName(currentDb.result);
         await populateDbView()
         await getRecentConnections();
-        // await 
         await populateDataViewerOptions();
       }
     } catch (err) {

@@ -234,6 +234,8 @@
 
       id("table-name").value = meta.name;
 
+      console.log(foreignKeys)
+
       buildColumnOptions(columnInfo, constraints["results"], foreignKeys["results"], meta.isAutoincrement);
       responsiveDataViewColumns(qs("table"));
     } catch (err) {
@@ -506,29 +508,6 @@
 
     return closeHolder;
   }
-
-  /**
-   * Deletes a column from a table
-   */
-  // async function deleteColFromTable() {
-  //   try {
-  //     let colname = `"${this.closest("tr").dataset.name}"`;
-  //     alert(`Are you sure you want to delete the column "${colname}"? (This will remove all data stored in this column!)`);
-
-  //     if (!this.closest("tr").classList.contains("new-col")) {
-  //       // delete from table for real
-  //       let res = await ipc.invoke("delete-col", colname);
-  //       if (res.type === "err") {
-  //         throw new Error(res.err);
-  //       }
-  //     }
-
-  //     qs(`#pk[value='${this.closest("tr").dataset.name}']`)
-  //     this.closest("tr").remove();
-  //   } catch (err) {
-  //     handleError(err);
-  //   }
-  // }
 
   /**
    * Retrieves information columns in a table.

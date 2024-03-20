@@ -259,7 +259,7 @@ const ipc = require('electron').ipcRenderer;
   }
 
   function parseForeignKeys() {
-    return [...qsa(".fk:checked")].map((input) => {
+    return [...qsa(".fk-check:checked")].map((input) => {
       let colName = input.closest("tr").dataset.name;
       let references = input.closest("tr").querySelector(".fk-value").value;
       let referencesTable = references.split(".")[0];
@@ -271,21 +271,24 @@ const ipc = require('electron').ipcRenderer;
 
   function creationStmt() {
     try {
-      let columnMeta = getNewColumnMeta();
-      let columnNames = [...columnMeta].map((col) => {
-        return `\n"${col[0]}" ${col[1]}`
-      });
-      let primaryKey = `\nPRIMARY KEY ("${id('pk').value}"${qs("tr[data-name='" + id('pk').value + "'] .ai")?.checked ? " AUTOINCREMENT" : ""}`;
-      let foreignKeys = parseForeignKeys()
+  //     let columnMeta = getNewColumnMeta();
+  //     let columnNames = [...columnMeta].map((col) => {
+  //       return `\n"${col[0]}" ${col[1]}`
+  //     });
+  //     let primaryKey = `\nPRIMARY KEY ("${id('pk').value}"${qs("tr[data-name='" + id('pk').value + "'] .ai")?.checked ? " AUTOINCREMENT" : ""}`;
+  //     let foreignKeys = parseForeignKeys()
 
-  //     "rating"	INTEGER NOT NULL DEFAULT 1,
-	// FOREIGN KEY("identifier") REFERENCES "Games",
-	// PRIMARY KEY("identifier" AUTOINCREMENT)
-      let query = `
-        ${columnNames},${foreignKeys.length > 0 ? foreignKeys + "," : ""}${primaryKey})
-      `.trim();
+  // //     "rating"	INTEGER NOT NULL DEFAULT 1,
+	// // FOREIGN KEY("identifier") REFERENCES "Games",
+	// // PRIMARY KEY("identifier" AUTOINCREMENT)
 
-      return query;
+  //     let query = `
+  //       ${columnNames},${foreignKeys.length > 0 ? foreignKeys.join(',\n') + "," : ""}${primaryKey})
+  //     `.trim();
+
+  //     return query;
+
+      return id("create-table-query").textContent
     } catch (err) {
       console.error(err);
     }
@@ -443,9 +446,10 @@ const ipc = require('electron').ipcRenderer;
     e.preventDefault();
     try {
       // let query = qs("#create-table-query").textContent;
-      let query = `CREATE TABLE \`${id("new-table-name").textContent}\` (\n`;
-      query += creationStmt();
-      query += "\n);";
+      // let query = `CREATE TABLE \`${id("new-table-name").textContent}\` (\n`;
+      // query += creationStmt();
+      // query += "\n);";
+      let query = creationStmt();
       
       await ipc.invoke('add-table', query);
       // alert(tables);
