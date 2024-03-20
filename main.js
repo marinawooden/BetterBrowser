@@ -190,6 +190,7 @@ ipcMain.handle("change-theme-preference", async () => {
 
 ipcMain.handle("get-theme-preference", getPrefersDark);
 
+// Adds new rows to the actual database
 ipcMain.handle("add-new-rows", async (event, ...args) => {
   try {
     console.log("HERE!");
@@ -211,9 +212,14 @@ ipcMain.handle("add-new-rows", async (event, ...args) => {
     let placeholderString = `(${columnNames.map(() => "?")})`;
     let query = `INSERT INTO ${viewingTable} (${formatColumns(columnNames)}) VALUES ${columnValues.map(() => placeholderString)}`;
 
-    await previewDB.conn.exec("BEGIN TRANSACTION;\n");
-    await previewDB.conn.run(query, columnValues.flat(1));
-    await previewDB.conn.exec("COMMIT;");
+    await db.exec("BEGIN TRANSACTION;\n");
+    console.log("***************************")
+    console.log(await db.all(`SELECT * FROM ${viewingTable}`))
+
+    console.log(query);
+    console.log(columnValues.flat(1))
+    await db.run(query, columnValues.flat(1));
+    await db.exec("COMMIT;");
 
     return {
       type: "success",
@@ -381,7 +387,6 @@ ipcMain.handle("commit-dataview-changes", async (event, ...args) => {
     db = await getDBConnection(currentDBPath);
 
     // TODO: Change table names
-
     hasUnsavedChanges = false;
 
     return {
@@ -960,6 +965,9 @@ ipcMain.handle("save-changes", async (event, ...args) => {
 
     qry = "\nBEGIN TRANSACTION;";
 
+    let allRows = await previewDB.conn.exec(`SELECT * FROM ${table}`)
+    console.log(allRows);
+
     if (newValues?.length > 0) {
       for (const arr of newValues) {
         // bleh.  Need to find out how to use placeholders
@@ -1065,6 +1073,8 @@ ipcMain.handle("add-empty-row", async (event, ...args) => {
       `PRAGMA foreign_key_list(\`${table}\`)`,
     );
 
+    console.log(violations);
+
     let conflicts = violations
       .map((viol) => {
         return {
@@ -1081,6 +1091,8 @@ ipcMain.handle("add-empty-row", async (event, ...args) => {
         res.lastID - 1,
       );
 
+      console.log(lastRecord)
+
       await previewDB.conn.run("COMMIT;");
       
       return {
@@ -1089,127 +1101,6 @@ ipcMain.handle("add-empty-row", async (event, ...args) => {
         pk: pk,
         fkconflicts: conflicts,
       };
-    // let conflicts = getForeignKeyViolations(table);
-
-    // INSERT INTO tablename (col1, col2, col3) VALUES (val1, val2, val3)
-
-    // return {
-    //   type: "success",
-    //   result: lastRecord,
-    //   pk: pk,
-    //   fkconflicts: conflicts,
-    // };
-
-    // const DEFAULTS = {
-    //   INTEGER: 1,
-    //   REAL: 1.0,
-    //   TEXT: "-",
-    //   BLOB: "-",
-    // };
-
-    // let isAutoincrement = await db.get(
-    //   "SELECT * FROM sqlite_master WHERE type = 'table' AND name = ? AND sql LIKE '%AUTOINCREMENT%'",
-    //   table,
-    // );
-
-    // await previewDB.conn.exec("BEGIN TRANSACTION;");
-
-    // const remove_key = Date.now();
-
-    // let colNames = [];
-    // let defValues = await Promise.all(
-    //   (await previewDB.conn.all(`PRAGMA table_info(\`${table}\`)`)).map(
-    //     async (col) => {
-
-    //       // Setting integer primary keys to anything that's not int or null can cause
-    //       // mismatch errors- avoiding this: https://www.sqlite.org/rescode.html#mismatch
-    //       if (col.pk === 1 && col.isAutoincrement) {
-    //         return remove_key;
-    //       }
-
-    //       colNames.push(col.name);
-
-    //       // prevent datatype mismatch first
-    //       if (
-    //         col.type === "INTEGER" &&
-    //         col.dflt_value &&
-    //         (typeof col.dflt_value) !== "number"
-    //       ) {
-    //         // parse the number out
-    //         col.dflt_value = (col.dflt_value.replace(/"/g, ""));
-
-    //         let numberRegex = new RegExp("[0-9]+");
-    //         let isNegative = (new RegExp("^\-").test(col.dflt_value));
-
-    //         let numParsed = parseInt((col.dflt_value).match(numberRegex)[0]);
-
-    //         return isNegative ? -numParsed : numParsed;
-    //       } else {
-    //         return col.dflt_value
-    //         ? col.dflt_value.replace(/"/g, "") // default value exists, remove quotes
-    //         : col.notnull === 1 // if should be not null but has no default value, set one
-    //         ? DEFAULTS[col.type] : null // otherwise return null
-    //       }
-    //     },
-    //   ),
-    // );
-
-    // defValues = defValues.filter((dV) => dV !== remove_key);
-
-    // console.log(defValues);
-
-    // let tableInfo = await previewDB.conn.all(`PRAGMA table_info(\`${table}\`)`);
-    // let pk = tableInfo.find((col) => col.pk === 1).name;
-
-    // console.log(
-    //   `INSERT INTO ${table} (${formatColumns(colNames)}) VALUES (${(defValues.map(() => "?")).join(", ")})`
-    // );
-
-    // console.log(defValues);
-
-    // // console.log(await previewDB.conn.all(`PRAGMA table_info(\`${table}\`)`))
-    // // console.log(defValues.map((v) => typeof v));
-
-    // let res = await previewDB.conn.run(
-    //   `INSERT INTO ${table} (${formatColumns(colNames)}) VALUES (${defValues.map(() => "?")})`,
-    //   defValues
-    // );
-
-    // console.log(
-    //   await previewDB.conn.all(`SELECT * FROM \`${table}\` LIMIT 1 OFFSET ?;`),
-    // );
-
-    // let lastRecord = await previewDB.conn.get(
-    //   `SELECT * FROM \`${table}\` LIMIT 1 OFFSET ?;`,
-    //   res.lastID - 1,
-    // );
-
-    // await previewDB.conn.exec("COMMIT;");
-
-    // // get foreign key conflicts
-    // let violations = await previewDB.conn.all("PRAGMA foreign_key_check");
-    // let foreignKeyNames = await previewDB.conn.all(
-    //   `PRAGMA foreign_key_list(\`${table}\`)`,
-    // );
-
-    // let conflicts = violations
-    //   .map((viol) => {
-    //     return {
-    //       ...viol,
-    //       col: foreignKeyNames.find(
-    //         (elem) => elem.id === viol.fkid && elem.table === viol.parent,
-    //       )?.from,
-    //     };
-    //   })
-    //   .filter((elem) => elem.table === table && elem.rowid === res.lastID);
-    // // let conflicts = getForeignKeyViolations(table);
-
-    // return {
-    //   type: "success",
-    //   result: lastRecord,
-    //   pk: pk,
-    //   fkconflicts: conflicts,
-    // };
   } catch (err) {
     console.log(err);
     await previewDB.conn.exec("ROLLBACK;");

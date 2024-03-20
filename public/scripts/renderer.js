@@ -414,17 +414,12 @@
       if (columnValues.length > 0) {
         res = await ipc.invoke("add-new-rows", viewingTable, getNewColumnValues(), getColumnNames());
         if (res.type === "err") {
-          if (res.detail === "SQLITE_CONSTRAINT") {
-            throw new Error("Please resolve all foreign key conflicts before saving!");
-          } else {
-            throw new Error(res.error);
-          }
+          throw new Error(res.error);
         }
 
         [...qsa(".new-row")].forEach((row) => {
           row.classList.remove("new-row")
           row.querySelectorAll("p").forEach((inpt) => {
-            // TODO: NEW ROWS
             inpt.addEventListener("input", saveDataViewerInput)
           });
         });
@@ -466,6 +461,7 @@
       console.log(res);
 
       let row = document.createElement("tr");
+      console.log(res.result);
 
       row.id = res.result[res.pk];
      
