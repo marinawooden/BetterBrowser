@@ -1042,73 +1042,22 @@ ipcMain.handle("add-empty-row", async (event, ...args) => {
       throw new Error("Missing required arguments!");
     }
 
-    let table = args[0];
+    await previewDB.conn.run("BEGIN TRANSACTION;")
 
     const DEFAULTS = {
-      INTEGER: 1,
-      REAL: 1.0,
-      TEXT: "-",
-      BLOB: "-",
-    };
+      "INTEGER": -1,
+      "TEXT": "-",
+      "BLOB": "-",
+      "FLOAT": -1.0
+    }
 
-    let isAutoincrement = await db.get(
-      "SELECT * FROM sqlite_master WHERE type = 'table' AND name = ? AND sql LIKE '%AUTOINCREMENT%'",
-      table,
-    );
+    let table = args[0];
 
-    await previewDB.conn.exec("BEGIN TRANSACTION;");
-
-    const remove_key = Date.now();
-
-    let colNames = [];
-    let defValues = await Promise.all(
-      (await previewDB.conn.all(`PRAGMA table_info(\`${table}\`)`)).map(
-        async (col) => {
-          // don't store the primary key col name if it's autoincrement, and remove it later on
-          if (col.pk === 1 && isAutoincrement) {
-            return remove_key;
-          }
-
-          
-          colNames.push(col.name);
-          return col.dflt_value
-            ? col.dflt_value.replace(/"/g, "")
-            : col.notnull === 1
-            ? DEFAULTS[col.type] : null
-        },
-      ),
-    );
-
-    defValues = defValues.filter((dV) => dV !== remove_key);
-
-    console.log(defValues);
+    let stmt = `INSERT INTO ${table} DEFAULT VALUES`;
+    let res = await previewDB.conn.run(stmt);
 
     let tableInfo = await previewDB.conn.all(`PRAGMA table_info(\`${table}\`)`);
     let pk = tableInfo.find((col) => col.pk === 1).name;
-
-    console.log(
-      `INSERT INTO ${table} (${formatColumns(colNames)}) VALUES (${defValues});`,
-    );
-
-    console.log(defValues);
-
-    // console.log(await previewDB.conn.all(`PRAGMA table_info(\`${table}\`)`))
-    // console.log(defValues.map((v) => typeof v));
-
-    let res = await previewDB.conn.run(
-      `INSERT INTO \`${table}\` (${formatColumns(colNames)}) VALUES (${defValues})`,
-    );
-
-    console.log(
-      await previewDB.conn.all(`SELECT * FROM \`${table}\` LIMIT 1 OFFSET ?;`),
-    );
-
-    let lastRecord = await previewDB.conn.get(
-      `SELECT * FROM \`${table}\` LIMIT 1 OFFSET ?;`,
-      res.lastID - 1,
-    );
-
-    await previewDB.conn.exec("COMMIT;");
 
     // get foreign key conflicts
     let violations = await previewDB.conn.all("PRAGMA foreign_key_check");
@@ -1126,14 +1075,141 @@ ipcMain.handle("add-empty-row", async (event, ...args) => {
         };
       })
       .filter((elem) => elem.table === table && elem.rowid === res.lastID);
+
+      let lastRecord = await previewDB.conn.get(
+        `SELECT * FROM \`${table}\` LIMIT 1 OFFSET ?;`,
+        res.lastID - 1,
+      );
+
+      await previewDB.conn.run("COMMIT;");
+      
+      return {
+        type: "success",
+        result: lastRecord,
+        pk: pk,
+        fkconflicts: conflicts,
+      };
     // let conflicts = getForeignKeyViolations(table);
 
-    return {
-      type: "success",
-      result: lastRecord,
-      pk: pk,
-      fkconflicts: conflicts,
-    };
+    // INSERT INTO tablename (col1, col2, col3) VALUES (val1, val2, val3)
+
+    // return {
+    //   type: "success",
+    //   result: lastRecord,
+    //   pk: pk,
+    //   fkconflicts: conflicts,
+    // };
+
+    // const DEFAULTS = {
+    //   INTEGER: 1,
+    //   REAL: 1.0,
+    //   TEXT: "-",
+    //   BLOB: "-",
+    // };
+
+    // let isAutoincrement = await db.get(
+    //   "SELECT * FROM sqlite_master WHERE type = 'table' AND name = ? AND sql LIKE '%AUTOINCREMENT%'",
+    //   table,
+    // );
+
+    // await previewDB.conn.exec("BEGIN TRANSACTION;");
+
+    // const remove_key = Date.now();
+
+    // let colNames = [];
+    // let defValues = await Promise.all(
+    //   (await previewDB.conn.all(`PRAGMA table_info(\`${table}\`)`)).map(
+    //     async (col) => {
+
+    //       // Setting integer primary keys to anything that's not int or null can cause
+    //       // mismatch errors- avoiding this: https://www.sqlite.org/rescode.html#mismatch
+    //       if (col.pk === 1 && col.isAutoincrement) {
+    //         return remove_key;
+    //       }
+
+    //       colNames.push(col.name);
+
+    //       // prevent datatype mismatch first
+    //       if (
+    //         col.type === "INTEGER" &&
+    //         col.dflt_value &&
+    //         (typeof col.dflt_value) !== "number"
+    //       ) {
+    //         // parse the number out
+    //         col.dflt_value = (col.dflt_value.replace(/"/g, ""));
+
+    //         let numberRegex = new RegExp("[0-9]+");
+    //         let isNegative = (new RegExp("^\-").test(col.dflt_value));
+
+    //         let numParsed = parseInt((col.dflt_value).match(numberRegex)[0]);
+
+    //         return isNegative ? -numParsed : numParsed;
+    //       } else {
+    //         return col.dflt_value
+    //         ? col.dflt_value.replace(/"/g, "") // default value exists, remove quotes
+    //         : col.notnull === 1 // if should be not null but has no default value, set one
+    //         ? DEFAULTS[col.type] : null // otherwise return null
+    //       }
+    //     },
+    //   ),
+    // );
+
+    // defValues = defValues.filter((dV) => dV !== remove_key);
+
+    // console.log(defValues);
+
+    // let tableInfo = await previewDB.conn.all(`PRAGMA table_info(\`${table}\`)`);
+    // let pk = tableInfo.find((col) => col.pk === 1).name;
+
+    // console.log(
+    //   `INSERT INTO ${table} (${formatColumns(colNames)}) VALUES (${(defValues.map(() => "?")).join(", ")})`
+    // );
+
+    // console.log(defValues);
+
+    // // console.log(await previewDB.conn.all(`PRAGMA table_info(\`${table}\`)`))
+    // // console.log(defValues.map((v) => typeof v));
+
+    // let res = await previewDB.conn.run(
+    //   `INSERT INTO ${table} (${formatColumns(colNames)}) VALUES (${defValues.map(() => "?")})`,
+    //   defValues
+    // );
+
+    // console.log(
+    //   await previewDB.conn.all(`SELECT * FROM \`${table}\` LIMIT 1 OFFSET ?;`),
+    // );
+
+    // let lastRecord = await previewDB.conn.get(
+    //   `SELECT * FROM \`${table}\` LIMIT 1 OFFSET ?;`,
+    //   res.lastID - 1,
+    // );
+
+    // await previewDB.conn.exec("COMMIT;");
+
+    // // get foreign key conflicts
+    // let violations = await previewDB.conn.all("PRAGMA foreign_key_check");
+    // let foreignKeyNames = await previewDB.conn.all(
+    //   `PRAGMA foreign_key_list(\`${table}\`)`,
+    // );
+
+    // let conflicts = violations
+    //   .map((viol) => {
+    //     return {
+    //       ...viol,
+    //       col: foreignKeyNames.find(
+    //         (elem) => elem.id === viol.fkid && elem.table === viol.parent,
+    //       )?.from,
+    //     };
+    //   })
+    //   .filter((elem) => elem.table === table && elem.rowid === res.lastID);
+    // // let conflicts = getForeignKeyViolations(table);
+
+    // return {
+    //   type: "success",
+    //   result: lastRecord,
+    //   pk: pk,
+    //   fkconflicts: conflicts,
+    // };
   } catch (err) {
     console.log(err);
     await previewDB.conn.exec("ROLLBACK;");

@@ -22,7 +22,6 @@
 
   // once the color scheme is available, set it
   
-
   function init() {
     webFrame.setZoomFactor(1);
 
@@ -97,7 +96,7 @@
 
   async function changeTheme() {
     console.log("FIRED!")
-    
+
     try {
       let res = await ipc.invoke("change-theme-preference");
       console.log(res);
