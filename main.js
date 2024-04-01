@@ -107,7 +107,7 @@ function handleSquirrelEvent() {
 }
 
 const openTableCreator = () => {
-  
+
   tableCreator = new BrowserWindow({
     width: 600,
     height: 600,
@@ -194,7 +194,7 @@ ipcMain.handle("change-theme-preference", async () => {
       window.webContents.send("theme-changed", !(prefersDarkMode.result) ? "dark" : "light");
     }
   });
-  
+
   return !(prefersDarkMode.result) ? "dark" : "light";
 });
 
@@ -1093,10 +1093,10 @@ ipcMain.handle("add-empty-row", async (event, ...args) => {
       .filter((elem) => elem.table === table && elem.rowid === res.lastID);
 
       let lastRecord = await previewDB.conn.get(
-        `SELECT * FROM artists LIMIT 1 OFFSET ((SELECT COUNT(*) FROM artists) - 1)`
+        `SELECT * FROM ${table} LIMIT 1 OFFSET ((SELECT COUNT(*) FROM ${table}) - 1)`
       );
 
-      // // 
+      // //
       // if (!lastRecord) {
       //   let numrows = await db.all(,);
       //   lastRecord = await previewDB.conn.get(
@@ -1109,7 +1109,7 @@ ipcMain.handle("add-empty-row", async (event, ...args) => {
       console.log(lastRecord)
 
       await previewDB.conn.run("COMMIT;");
-      
+
       return {
         type: "success",
         result: lastRecord,
