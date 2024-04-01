@@ -1,12 +1,27 @@
 "use strict";
-const ipc = require('electron').ipcRenderer;
-// FOREIGN KEY("identifier") REFERENCES "Games"("identifier")
 (function() {
+  const ipc = require('electron').ipcRenderer;
+
   const SQLITE_TYPES = ["INTEGER", "REAL", "TEXT", "BLOB"];
+  const THEME_ARG_REGEX = new RegExp("^--color-theme=");
+
+  let theme = "dark"; // color theme information
 
   window.addEventListener("load", init);
 
   function init() {
+    // get color theme
+    getColorTheme();
+    // listen for changes to color theme
+    ipc.on("theme-changed", () => {
+      console.log(theme)
+      if (theme === "light") {
+        removeLightMode();
+      } else {
+        showLightMode();
+      }
+    });
+
     id("table-options").addEventListener("submit", makeNewTable);
     id("table-name").addEventListener("input", changeTableName);
     id("pk").addEventListener("change", changePrimaryKey);
@@ -271,27 +286,71 @@ const ipc = require('electron').ipcRenderer;
 
   function creationStmt() {
     try {
-  //     let columnMeta = getNewColumnMeta();
-  //     let columnNames = [...columnMeta].map((col) => {
-  //       return `\n"${col[0]}" ${col[1]}`
-  //     });
-  //     let primaryKey = `\nPRIMARY KEY ("${id('pk').value}"${qs("tr[data-name='" + id('pk').value + "'] .ai")?.checked ? " AUTOINCREMENT" : ""}`;
-  //     let foreignKeys = parseForeignKeys()
+      // Must construct the query in this way to only get visible text
+      let tblName = id("new-table-name").textContent;
+      let pk = id("primary-key-name").textContent;
+      let fk = id("foreign-keys").textContent;
+      let rows = [...qsa("#rows > p")].map((row) => {
+        console.log(row)
+        // will always be needed (name and type of col)
+        let colName = row.querySelector(".col-name").textContent;
+        let colType = row.querySelector(".col-type").textContent;
+        let options = [...row.querySelectorAll(":not(.col-name, .col-type, .hidden)")];
+        options = options.map((opt) => {
+          console.log(opt.textContent);
+          // basically don't want the last comma
+          return opt.textContent == "NOT NULL ," ? "NOT NULL" : opt.textContent.trim()
+        });
 
-  // //     "rating"	INTEGER NOT NULL DEFAULT 1,
-	// // FOREIGN KEY("identifier") REFERENCES "Games",
-	// // PRIMARY KEY("identifier" AUTOINCREMENT)
+        return `${colName} ${colType} ${options.join(" ")}`;
+      });
+      
+      let qry = `CREATE TABLE "${tblName}" (
+        ${rows},
+        PRIMARY KEY ("${pk}")
+        ${fk ? ',' + fk : ""}
+      )`;
 
-  //     let query = `
-  //       ${columnNames},${foreignKeys.length > 0 ? foreignKeys.join(',\n') + "," : ""}${primaryKey})
-  //     `.trim();
+      console.log(qry);
 
-  //     return query;
-
-      return id("create-table-query").textContent
+      // return id("create-table-query").textContent;
+      return qry;
     } catch (err) {
       console.error(err);
     }
+  }
+
+  /**
+   * Gets information about user's preferred color theme
+   */
+  function getColorTheme() {
+    let colorThemeParam = window.process.argv.find((e) => THEME_ARG_REGEX.test(e));
+    theme = colorThemeParam.replace(THEME_ARG_REGEX, "");
+
+    console.log(window.process.argv);
+    
+    console.log(theme);
+    if (theme === "light") {
+      showLightMode()
+    }
+  }
+
+  function removeLightMode() {
+    console.log("REMOVING LIGHT MODE")
+    document.head.querySelector('link[rel=stylesheet][href~="stylesheets/lightmode.css"]').remove();
+    theme = "dark";
+  }
+
+  // add all light mode attributes
+  function showLightMode() {
+    let link = document.createElement("link");
+
+    link.type = "text/css";
+    link.rel = "stylesheet";
+    link.href = "stylesheets/lightmode.css";
+
+    document.head.appendChild(link);
+    theme = "light";
   }
 
   function responsiveDataViewColumns(table) {

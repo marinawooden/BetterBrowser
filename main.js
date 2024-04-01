@@ -31,6 +31,7 @@ let editingTable;
 let csvUpload;
 let csvPath;
 let hasUnsavedChanges = false;
+let colorTheme = "dark";
 
 // check if the app is running as a Squirrel.windows command
 // if (sqrl) {
@@ -106,6 +107,7 @@ function handleSquirrelEvent() {
 }
 
 const openTableCreator = () => {
+  
   tableCreator = new BrowserWindow({
     width: 600,
     height: 600,
@@ -114,6 +116,7 @@ const openTableCreator = () => {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: true,
       contextIsolation: false,
+      additionalArguments: [`--color-theme=${colorTheme}`]
     },
   });
 
@@ -148,6 +151,7 @@ const openTableEditor = () => {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: true,
       contextIsolation: false,
+      additionalArguments: [`--color-theme=${colorTheme}`]
     },
   });
 
@@ -184,6 +188,12 @@ ipcMain.handle("change-theme-preference", async () => {
   let prefersDarkMode = await getPrefersDark();
   console.log(prefersDarkMode);
   await store.set("prefers-dark", !(prefersDarkMode.result));
+
+  [win, tableEditor, tableCreator].forEach((window) => {
+    if (window) {
+      window.webContents.send("theme-changed", !(prefersDarkMode.result) ? "dark" : "light");
+    }
+  });
   
   return !(prefersDarkMode.result) ? "dark" : "light";
 });
@@ -1052,17 +1062,13 @@ ipcMain.handle("add-empty-row", async (event, ...args) => {
 
     await previewDB.conn.run("BEGIN TRANSACTION;")
 
-    const DEFAULTS = {
-      "INTEGER": -1,
-      "TEXT": "-",
-      "BLOB": "-",
-      "FLOAT": -1.0
-    }
-
     let table = args[0];
 
     let stmt = `INSERT INTO ${table} DEFAULT VALUES`;
     let res = await previewDB.conn.run(stmt);
+
+    console.log("ADDED EMPTY ROW")
+    console.log(res);
 
     let tableInfo = await previewDB.conn.all(`PRAGMA table_info(\`${table}\`)`);
     let pk = tableInfo.find((col) => col.pk === 1).name;
@@ -1087,10 +1093,19 @@ ipcMain.handle("add-empty-row", async (event, ...args) => {
       .filter((elem) => elem.table === table && elem.rowid === res.lastID);
 
       let lastRecord = await previewDB.conn.get(
-        `SELECT * FROM \`${table}\` LIMIT 1 OFFSET ?;`,
-        res.lastID - 1,
+        `SELECT * FROM artists LIMIT 1 OFFSET ((SELECT COUNT(*) FROM artists) - 1)`
       );
 
+      // // 
+      // if (!lastRecord) {
+      //   let numrows = await db.all(,);
+      //   lastRecord = await previewDB.conn.get(
+      //   `SELECT * FROM \`${table}\` LIMIT 1;`,
+      //   lastrowid.id - 1,
+      // );
+      // }
+
+      console.log("LAST RECORD");
       console.log(lastRecord)
 
       await previewDB.conn.run("COMMIT;");
@@ -1689,7 +1704,7 @@ const createWindow = async () => {
   }
 
   // technically not handling the error response from this function- ITS OKAY I SWEAR
-  let colorTheme = (await getPrefersDark())?.result ? "dark" : "light";
+  colorTheme = (await getPrefersDark())?.result ? "dark" : "light";
 
   win = new BrowserWindow({
     width: 800,

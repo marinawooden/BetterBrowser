@@ -10,8 +10,10 @@
 (function() { 
   const SQLITE_TYPES = ["INTEGER", "REAL", "TEXT", "BLOB"];
   const ipc = require('electron').ipcRenderer;
+  const THEME_ARG_REGEX = new RegExp("^--color-theme=")
 
   let hasChanges = false;
+  let theme = "dark"; // color scheme information
   
   window.addEventListener("load", init);
 
@@ -21,6 +23,17 @@
   function init() {
     // get database creation query, build creation query
     fillTableInfo();
+
+    // get color theme
+    getColorTheme();
+    // listen for changes to color theme
+    ipc.on("theme-changed", () => {
+      if (theme === "light") {
+        removeLightMode();
+      } else {
+        showLightMode();
+      }
+    });
 
     // update primary key functionality
     id("pk").addEventListener("change", newPk);
@@ -57,6 +70,39 @@
     window.addEventListener("resize", () => {
       responsiveDataViewColumns(qs("table"))
     });
+  }
+
+  /**
+   * Gets information about user's preferred color theme
+   */
+  function getColorTheme() {
+    let colorThemeParam = window.process.argv.find((e) => THEME_ARG_REGEX.test(e));
+    theme = colorThemeParam.replace(THEME_ARG_REGEX, "");
+
+    console.log(window.process.argv);
+    
+    console.log(theme);
+    if (theme === "light") {
+      showLightMode()
+    }
+  }
+    
+  // removes the light mode css.  This really should be factored into a utils file
+  function removeLightMode() {
+    document.head.querySelector('link[rel=stylesheet][href~="stylesheets/lightmode.css"]').remove();
+    theme = "dark";
+  }
+
+  // add all light mode attributes
+  function showLightMode() {
+    let link = document.createElement("link");
+
+    link.type = "text/css";
+    link.rel = "stylesheet";
+    link.href = "stylesheets/lightmode.css";
+
+    document.head.appendChild(link);
+    theme = "light";
   }
 
   async function getConstraints() {

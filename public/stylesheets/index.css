@@ -189,7 +189,18 @@ th:first-of-type {
   animation: spin-up 1s forwards;
 }
 
+#preferences-link > div {
+  overflow: hidden;
+  transition: all 1s;
+  opacity: 1;
+}
+
+#preferences-link.closed > div {
+  opacity: 0;
+}
+
 #preferences-link ul {
+  margin: 0;
   padding: 0;
   list-style-type: none;
   display: flex;
@@ -583,7 +594,7 @@ select {
   cursor: pointer;
 }
 
-div#data-holder { 
+#table-view div#data-holder { 
   overflow-y: scroll;
   position: relative;
   height: 100%;

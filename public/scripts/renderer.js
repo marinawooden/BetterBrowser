@@ -461,15 +461,22 @@
       console.log(res);
 
       let row = document.createElement("tr");
+      console.log(res);
       console.log(res.result);
 
-      row.id = res.result[res.pk];
+      row.id = res.result?.[res.pk];
      
       row.classList.add("new-row");
 
       let fkviolations = res.fkconflicts?.map((e) => e.rowid + e.col);
 
-      ["", ...Object.keys(res.result)].forEach((col, i) => {
+      let colNames = [...qsa("#data-holder th")].map((col) => {
+        return col.textContent;
+      });
+
+      // colNames.shift();
+
+      colNames.forEach((col, i) => {
         let cell = document.createElement("td");
         if (i === 0) {
           let checkboxHolder = document.createElement("div");
